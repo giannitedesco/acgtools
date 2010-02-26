@@ -9,6 +9,7 @@ class serio:
 
 	def trace(self, line):
 		self.__trace.write(line + '\n')
+		self.__trace.flush()
 
 	def tx(self, cmd):
 		#cmd = cmd + '\r\n'
