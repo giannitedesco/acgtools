@@ -17,9 +17,15 @@ class acg:
 				raise ACG_BadResponse(cmd, resp)
 			eeprom += chr(byte)
 		return eeprom
+	
+	def __flash_eeprom(self, bin):
+		assert(len(bin) == EEPROM_BYTES)
+		bin = bin[EEPROM_READONLY:]
+		for i in range(0, EEPROM_BYTES - EEPROM_READONLY):
+			cmd = "wp%.2X%.2X"%(i + EEPROM_READONLY, ord(bin[i]))
+			resp = self.__trancieve(cmd)
 
-	def __init__(self, line="/dev/ttyUSB0", baud=460800, tracefile=None):
-		self.__serio = serio(line, baud, tracefile)
+	def __hard_reset(self):
 		self.__banner = self.__trancieve("x")
 		time.sleep(0.150)
 
@@ -29,6 +35,9 @@ class acg:
 		self.__serio.tx("s")
 		while self.__serio.rx() != 'S':
 			continue
+
+	def __init__(self, line="/dev/ttyUSB0", baud=460800, tracefile=None):
+		self.__serio = serio(line, baud, tracefile)
 		self.__eeprom = eeprom(self.__read_eeprom())
 
 	def __trancieve(self, cmd):
@@ -59,7 +68,14 @@ class acg:
 		f = open(filename, 'w')
 		f.write(self.__eeprom.binary())
 		f.close()
-	
+
+	def flash_eeprom(self, filename):
+		f = open(filename, 'r')
+		img = eeprom(f.read())
+		f.close()
+		self.__flash_eeprom(img.binary())
+		self.__hard_reset()
+
 	def get_eeprom(self):
 		return self.__eeprom
 

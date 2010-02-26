@@ -8,9 +8,13 @@ if __name__ == '__main__':
 	except acg.ACG_Exception, e:
 		print e.msg
 
-	#eeprom_fn = "acg-eeprom.bin";
-	#card.dump_eeprom(eeprom_fn)
-	#print "Dumped EEPROM: %s"%eeprom_fn
+	eeprom_fn = "acg-eeprom.bin";
+	card.dump_eeprom(eeprom_fn)
+	print "Dumped EEPROM: %s"%eeprom_fn
+	#print "Flashing EEPROM: %s"%eeprom_fn
+	#card.flash_eeprom(eeprom_fn)
+
+	raise SystemExit
 
 	try:
 		uid = card.select()

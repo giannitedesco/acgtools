@@ -1,6 +1,7 @@
 from errors import ACG_EEPROM_Error, ACG_EEPROM_ValueError
 
 EEPROM_BYTES 		= 0xf0
+EEPROM_READONLY		= 0x0a
 
 PCON1_AUTO_START	= (1<<0)
 PCON1_PROTOCOL		= (1<<1)
@@ -41,7 +42,7 @@ class eeprom:
 		return
 	
 	def binary(self):
-		return self.__bin
+		return str(self.__bin)
 	
 	def get_dev_id(self):
 		return int("".join(map(lambda x:"%.2x"%x,
