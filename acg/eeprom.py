@@ -18,6 +18,10 @@ PCON2_NOISY_ENV		= (1<<3)
 PCON2_ANTI_COLLISION	= (1<<6)
 PCON2_ERR_HANDLING	= (1<<7)
 
+PCON3_AUTO_TIMEOUT	= (1<<0)
+PCON3_PAGE_READ		= (1<<2)
+PCON3_EXT_REQA		= (1<<6)
+
 OPMODE_1443A		= (1<<0)
 OPMODE_1443B		= (1<<1)
 OPMODE_SR176		= (1<<2)
@@ -50,21 +54,24 @@ class eeprom:
 					self.__bin[4:8])), 16)
 	def set_admin_data(self, dev_id):
 		raise ACG_EEPROM_ValueError("Admin data is read-only")
-	
+
+	def __set_byte(self, ofs, byte):
+		x = int(byte)
+		if x < 0 or x > 0xff:
+			raise ACG_EEPROM_ValueError("Byte out of range")
+		self.__bin[ofs] = byte
+
 	def get_station_id(self):
 		return self.__bin[0x0a]
 	def set_station_id(self, s_id):
-		x = int(s_id)
-		if x < 0 or x > 0xff:
-			raise ACG_EEPROM_ValueError()
-		self.__bin[0x0a] = chr(s_id)
+		self.__set_byte(0x0a, s_id)
 	
 	def get_baud_rate(self):
 		baud = self.__bin[0x0c] & 7
 		return baud_rates[baud]
 	def set_baud_rate(self, rate):
 		if rate < 0 or not rate in baud_rates:
-			raise ACG_EEPROM_ValueError()
+			raise ACG_EEPROM_ValueError("Invalid baud rate")
 		self.__bin[0x0c] = chr(baud_rates.index(rate))
 
 	def get_guard(self):
@@ -73,7 +80,7 @@ class eeprom:
 		try:
 			g = float(guard)
 		except:
-			raise ACG_EEPROM_ValueError()
+			raise ACG_EEPROM_ValueError("Invalid guard time")
 		guard = int(round((g * 1000.0) / 37.8))
 		self.__bin[0xd] = guard
 
@@ -83,7 +90,7 @@ class eeprom:
 		try:
 			set = bool(b)
 		except:
-			raise ACG_EEPROM_ValueError()
+			raise ACG_EEPROM_ValueError("Value out of range")
 		if set:
 			self.__bin[byte] |= bit
 		else:
@@ -170,7 +177,7 @@ class eeprom:
 		try:
 			val = int(ms)
 		except ValueErrror:
-			raise ACG_EEPROM_ValueError()
+			raise ACG_EEPROM_ValueError("Timeout not integer")
 		self.__bin[0x0f] = val / 100
 
 	def get_multitag_reset(self):
@@ -203,6 +210,100 @@ class eeprom:
 	def set_err_handling(self, bit):
 		self.__set_bit(0x13, PCON2_ERR_HANDLING, not bit)
 
+	def get_reset_time(self):
+		return self.__bin[0x14]
+	def set_reset_time(self, ms):
+		self.__set_byte(0x14, ms)
+
+	def get_recover_time(self):
+		val = self.__bin[0x15] 
+		pcon2 = self.__bin[0x13]
+		mult = (pcon2 & ((1<<4)|(1<<5))) >> 4
+		return val * mult
+	def set_recover_time(self, ms):
+		mult = ms >> 8
+		if mult > 3:
+			raise ACG_EEPROM_ValueError("Recover time out of range")
+		if mult:
+			d = {}
+			for m in [1, 2, 3]:
+				if ms / m > 0xff:
+					continue
+				d[ms % m] = m
+			keys = d.keys()
+			keys.sort()
+			mult = d[keys[0]]
+			val = int(round(float(ms) / float(mult)))
+		else:
+			val = ms
+		self.__set_byte(0x15, val)
+		pcon2 = self.__bin[0x13]
+		pcon2 &= ~((1<<4)|(1<<5)) & 0xff
+		pcon2 |= mult << 4
+		self.__set_byte(0x13, pcon2)
+
+	def get_afi(self):
+		return self.__bin[0x16]
+	def set_afi(self, ms):
+		self.__set_byte(0x16, ms)
+
+	def __get_timeslice(self, ofs):
+		return float(self.__bin[ofs]) * 0.3
+	def __set_timeslice(self, ofs, val):
+		try:
+			f = float(val)
+		except ValueError:
+			raise ACG_EEPROM_ValueError("Bad timeslice count")
+		self.__set_byte(ofs, int(round(f / 0.3)))
+	
+	def get_tmo_1443a(self):
+		return self.__get_timeslice(0x17)
+	def set_tmo_1443a(self, val):
+		return self.__set_timeslice(0x17, val)
+
+	def get_tmo_1443b(self):
+		return self.__get_timeslice(0x18)
+	def set_tmo_1443b(self, val):
+		return self.__set_timeslice(0x18, val)
+
+	def get_tmo_sr176(self):
+		return self.__get_timeslice(0x19)
+	def set_tmo_sr176(self, val):
+		return self.__set_timeslice(0x19, val)
+
+	def get_tmo_15693(self):
+		return self.__get_timeslice(0x1a)
+	def set_tmo_15693(self, val):
+		return self.__set_timeslice(0x1a, val)
+
+	def get_auto_tmo(self):
+		return not self.__get_bit(0x1b, PCON3_AUTO_TIMEOUT)
+	def set_auto_tmo(self, bit):
+		self.__set_bit(0x1b, PCON3_AUTO_TIMEOUT, not bit)
+
+	def get_page_read(self):
+		return self.__get_bit(0x1b, PCON3_PAGE_READ)
+	def set_page_Read(self, bit):
+		self.__set_bit(0x1b, PCON3_PAGE_READ, bit)
+
+	def get_ext_reqa(self):
+		return self.__get_bit(0x1b, PCON3_EXT_REQA)
+	def set_ext_reqa(self, bit):
+		self.__set_bit(0x1b, PCON3_EXT_REQA, bit)
+
+
+	def __dump(self, src, length=16):
+		FILTER = ''.join([(len(repr(chr(x)))==3) \
+			and chr(x) or '.' for x in range(256)])
+		N = 0
+		result=''
+		while src:
+			s,src = src[:length],src[length:]
+			hexa = ' '.join(["%02X"%ord(x) for x in s])
+			s = s.translate(FILTER)
+			result += "  %04X %-*s %s\n" % (N, length, s, hexa)
+			N+=length
+		return result
 	def print_info(self):
 		fields = [
 			("Device ID", "0x%.8x", eeprom.get_dev_id),
@@ -231,9 +332,24 @@ class eeprom:
 			("Binary frames v2", "%r", eeprom.get_binary_frame2),
 			("Noisy environment", "%r", eeprom.get_noisy_env),
 			("ISO Anti-collision", "%r", eeprom.get_anti_collision),
-			("ISO Err handling", "%r", eeprom.get_err_handling)
+			("ISO Err handling", "%r", eeprom.get_err_handling),
+			("Reset time (ms)", "%u", eeprom.get_reset_time),
+			("Recover time (ms)", "%u", eeprom.get_recover_time),
+			("AFI", "%u", eeprom.get_afi),
+			("Timeout ISO 1443-A", "%.3f", eeprom.get_tmo_1443a),
+			("Timeout ISO 1443-B", "%.3f", eeprom.get_tmo_1443b),
+			("Timeout SR-176", "%.3f", eeprom.get_tmo_sr176),
+			("Timeout ISO 15693", "%.3f", eeprom.get_tmo_15693),
+			("Auto timeout", "%r", eeprom.get_auto_tmo),
+			("Page Read Mode", "%r", eeprom.get_page_read),
+			("Ext. REQA", "%r", eeprom.get_ext_reqa),
 		]
 
 		for (name, fmt, getter) in fields:
 			val = getter(self)
 			print ("  %-18s: %s"%(name, fmt))%val
+
+		print "  Slack data:"
+		print self.__dump("".join(map(chr, self.__bin[0x1c:0x80])))
+		print "  User data:"
+		print self.__dump("".join(map(chr, self.__bin[0x80:])))
