@@ -1,19 +1,20 @@
 from errors import *
+from eeprom import *
 from serio import serio
 import time
 
 class acg:
 	def __read_eeprom(self):
 		eeprom = ''
-		for i in range(0, 0xf0):
+		for i in range(0, EEPROM_BYTES):
 			cmd = "rp%.2X"%i
 			resp = self.__trancieve(cmd)
 			if len(resp) != 2:
-				raise ACGBadResponse(cmd, resp)
+				raise ACG_BadResponse(cmd, resp)
 			try:
 				byte = int(resp, 16)
 			except ValueError:
-				raise ACGBadResponse(cmd, resp)
+				raise ACG_BadResponse(cmd, resp)
 			eeprom += chr(byte)
 		return eeprom
 
@@ -28,35 +29,35 @@ class acg:
 		self.__serio.tx("s")
 		while self.__serio.rx() != 'S':
 			continue
-		self.__eeprom = self.__read_eeprom()
+		self.__eeprom = eeprom(self.__read_eeprom())
 
 	def __trancieve(self, cmd):
 		self.__serio.tx(cmd)
 		ret = self.__serio.rx()
 		if len(ret) == 0:
-			raise ACGIOError, "Reader returned nothing"
+			raise ACG_IOError, "Reader returned nothing"
 		if len(ret) == 1:
 			if ret[0] == '?':
-				raise ACGUnknownCommand(cmd[0])
+				raise ACG_UnknownCommand(cmd[0])
 			if ret[0] == 'C':
-				raise ACGCollision
+				raise ACG_Collision
 			if ret[0] == 'F':
-				raise ACGCommandFail(cmd)
+				raise ACG_CommandFail(cmd)
 			if ret[0] == 'I':
-				raise ACGInvalidValue(cmd)
+				raise ACG_InvalidValue(cmd)
 			if ret[0] == 'N':
-				raise ACGNoTagInField
+				raise ACG_NoTagInField
 			if ret[0] == 'O':
-				raise ACGOperationMode(cmd)
+				raise ACG_OperationMode(cmd)
 			if ret[0] == 'R':
-				raise ACGRangeError(cmd)
+				raise ACG_RangeError(cmd)
 			if ret[0] == 'X':
-				raise ACGAuthFailure
+				raise ACG_AuthFailure
 		return ret
 
 	def dump_eeprom(self, filename):
 		f = open(filename, 'w')
-		f.write(self.__eeprom)
+		f.write(self.__eeprom.binary())
 		f.close()
 
 	def select(self):

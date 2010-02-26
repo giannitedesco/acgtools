@@ -1,42 +1,66 @@
-class ACGException:
-	pass
+class ACG_Exception:
+	def __init__(self):
+		self.msg = msg
 
-class ACGIOError(ACGException):
-	pass
+class ACG_EEPROM_Error(ACG_Exception):
+	def __init__(self, msg = None):
+		if not msg:
+			msg = "EEPROM format error"
+		self.msg = msg
 
-class ACGBadResponse(ACGException):
+class ACG_EEPROM_ValueError(ACG_Exception):
+	def __init__(self, msg = None):
+		if not msg:
+			msg = "Attempted to set an invalid EEPROM value"
+		self.msg = msg
+
+class ACG_IOError(ACG_Exception):
+	def __init__(self, msg = None):
+		if not msg:
+			msg = "ACG_ I/O error"
+		self.msg = msg
+
+class ACG_BadResponse(ACG_Exception):
 	def __init__(self, cmd, resp):
 		self.cmd = cmd
 		self.resp = resp
+		self.msg = "%r is bad response to command %r"%(cmd, resp)
 
 # Following errors defiend by the spec
-class ACGUnknownCommand(ACGException):
+class ACG_UnknownCommand(ACG_Exception):
 	def __init__(self, cmd_id):
 		assert(len(cmd_id) == 1)
 		self.cmd_id = cmd_id
-		self.msg = "Unknown Command: %.2x"%ord(cmd_id)
+		self.msg = "Unknown Command: %.2x (%s)"%(ord(cmd_id), cmd_id)
 
-class ACGCollision(ACGException):
-	pass
+class ACG_Collision(ACG_Exception):
+	def __init__(self):
+		self.msg = "Collision or CRC/MAC error"
 
-class ACGCommandFail(ACGException):
+class ACG_CommandFail(ACG_Exception):
 	def __init__(self, cmd):
 		self.cmd = cmd
+		self.msg = "Command failed: %r"%cmd
 
-class ACGInvalidValue(ACGException):
+class ACG_InvalidValue(ACG_Exception):
 	def __init__(self, cmd):
 		self.cmd = cmd
+		self.msg = "Command contained invalid value: %r"%cmd
 
-class ACGNoTagInField(ACGException):
-	pass
+class ACG_NoTagInField(ACG_Exception):
+	def __init__(self):
+		self.msg = "No tag in field"
 
-class ACGOperationMode(ACGException):
+class ACG_OperationMode(ACG_Exception):
 	def __init__(self, cmd):
 		self.cmd = cmd
+		self.msg = "Command invalid in current operating mode: %r"%cmd
 
-class ACGRangeError(ACGException):
+class ACG_RangeError(ACG_Exception):
 	def __init__(self, cmd):
 		self.cmd = cmd
+		self.msg = "Command parameter out of range: %r"%cmd
 
-class ACGAuthFailed(ACGException):
-	pass
+class ACG_AuthFailed(ACG_Exception):
+	def __init__(self, cmd):
+		self.msg = "Authentication failed: %r"%cmd
