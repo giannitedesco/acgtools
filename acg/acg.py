@@ -25,7 +25,7 @@ class acg:
 		# In a work of genius we need to get the list of tags in the
 		# field before we can read the EEPROM to determine whether
 		# we need to get the list of tags in the field
-		self.__trancieve("s")
+		self.__serio.tx("s")
 		while self.__serio.rx() != 'S':
 			continue
 		self.__eeprom = self.__read_eeprom()
