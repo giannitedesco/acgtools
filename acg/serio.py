@@ -11,8 +11,9 @@ class serio:
 		self.__trace.write(line + '\n')
 
 	def tx(self, cmd):
-		self.trace(">>> %s"%cmd)
-		self.__s.write(cmd + "\r\n")
+		#cmd = cmd + '\r\n'
+		self.trace(">>> %r"%cmd)
+		self.__s.write(cmd)
 
 	def rx(self):
 		ret = self.__s.readline()
