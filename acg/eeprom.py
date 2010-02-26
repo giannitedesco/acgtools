@@ -11,6 +11,13 @@ PCON1_SINGLE_SHOT	= (1<<5)
 PCON1_EXT_PROTOCOL	= (1<<6)
 PCON1_EXT_ID		= (1<<7)
 
+PCON2_MULTITAG_RESET	= (1<<0)
+PCON2_STARTUP_MSG	= (1<<1)
+PCON2_BINARY_FRAME2	= (1<<2)
+PCON2_NOISY_ENV		= (1<<3)
+PCON2_ANTI_COLLISION	= (1<<6)
+PCON2_ERR_HANDLING	= (1<<7)
+
 OPMODE_1443A		= (1<<0)
 OPMODE_1443B		= (1<<1)
 OPMODE_SR176		= (1<<2)
@@ -166,6 +173,36 @@ class eeprom:
 			raise ACG_EEPROM_ValueError()
 		self.__bin[0x0f] = val / 100
 
+	def get_multitag_reset(self):
+		return not self.__get_bit(0x13, PCON2_MULTITAG_RESET)
+	def set_multitag_reset(self, bit):
+		self.__set_bit(0x13, PCON2_MULTITAG_RESET, not bit)
+
+	def get_startup_msg(self):
+		return not self.__get_bit(0x13, PCON2_STARTUP_MSG)
+	def set_startup_msg(self, bit):
+		self.__set_bit(0x13, PCON2_STARTUP_MSG, not bit)
+
+	def get_binary_frame2(self):
+		return self.__get_bit(0x13, PCON2_BINARY_FRAME2)
+	def set_binary_frame2(self, bit):
+		self.__set_bit(0x13, PCON2_BINARY_FRAME2, bit)
+
+	def get_noisy_env(self):
+		return self.__get_bit(0x13, PCON2_NOISY_ENV)
+	def set_noisy_env(self, bit):
+		self.__set_bit(0x13, PCON2_NOISY_ENV, bit)
+
+	def get_anti_collision(self):
+		return self.__get_bit(0x13, PCON2_ANTI_COLLISION)
+	def set_anti_collision(self, bit):
+		self.__set_bit(0x13, PCON2_ANTI_COLLISION, bit)
+
+	def get_err_handling(self):
+		return not self.__get_bit(0x13, PCON2_ERR_HANDLING)
+	def set_err_handling(self, bit):
+		self.__set_bit(0x13, PCON2_ERR_HANDLING, not bit)
+
 	def print_info(self):
 		fields = [
 			("Device ID", "0x%.8x", eeprom.get_dev_id),
@@ -188,9 +225,15 @@ class eeprom:
 			("op: ISO 15693", "%r", eeprom.get_op_15693),
 			("op: ICODE-EPC", "%r", eeprom.get_op_icode_epc),
 			("op: ICODE-UID", "%r", eeprom.get_op_icode_uid),
-			("Single shot (ms)", "%u", eeprom.get_single_shot_tmo)
+			("Single shot (ms)", "%u", eeprom.get_single_shot_tmo),
+			("Multitag reset", "%r", eeprom.get_multitag_reset),
+			("Startup message", "%r", eeprom.get_startup_msg),
+			("Binary frames v2", "%r", eeprom.get_binary_frame2),
+			("Noisy environment", "%r", eeprom.get_noisy_env),
+			("ISO Anti-collision", "%r", eeprom.get_anti_collision),
+			("ISO Err handling", "%r", eeprom.get_err_handling)
 		]
 
 		for (name, fmt, getter) in fields:
 			val = getter(self)
-			print ("%-16s: %s"%(name, fmt))%val
+			print ("  %-18s: %s"%(name, fmt))%val
