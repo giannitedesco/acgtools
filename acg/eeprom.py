@@ -70,59 +70,127 @@ class eeprom:
 		guard = int(round((g * 1000.0) / 37.8))
 		self.__bin[0xd] = guard
 
+	def __get_bit(self, byte, bit):
+		return bool(self.__bin[byte] & bit)
+	def __set_bit(self, byte, bit, b):
+		try:
+			set = bool(b)
+		except:
+			raise ACG_EEPROM_ValueError()
+		if set:
+			self.__bin[byte] |= bit
+		else:
+			self.__bin[byte] &= (~bit) & 0xff
+
+	def get_auto_start(self):
+		return self.__get_bit(0x0b, PCON1_AUTO_START)
+	def set_auto_start(self, bit):
+		self.__set_bit(0xb, PCON1_AUTO_START, bit)
+
+	def get_binary(self):
+		return self.__get_bit(0x0b, PCON1_PROTOCOL)
+	def set_binary(self, bit):
+		self.__set_bit(0xb, PCON1_PROTOCOL, bit)
+
+	def get_multitag(self):
+		return self.__get_bit(0x0b, PCON1_MULTITAG)
+	def set_multitag(self, bit):
+		self.__set_bit(0xb, PCON1_MULTITAG, bit)
+
+	def get_new_serial_mode(self):
+		return self.__get_bit(0x0b, PCON1_NEW_SERIAL_MODE)
+	def set_new_serial_mode(self, bit):
+		self.__set_bit(0xb, PCON1_NEW_SERIAL_MODE, bit)
+
+	def get_program_led(self):
+		return self.__get_bit(0x0b, PCON1_LED)
+	def set_program_led(self, bit):
+		self.__set_bit(0xb, PCON1_LED, bit)
+
+	def get_single_shot(self):
+		return self.__get_bit(0x0b, PCON1_SINGLE_SHOT)
+	def set_single_shot(self, bit):
+		self.__set_bit(0xb, PCON1_SINGLE_SHOT, bit)
+
+	def get_ext_protocol(self):
+		return self.__get_bit(0x0b, PCON1_EXT_PROTOCOL)
+	def set_ext_protocol(self, bit):
+		self.__set_bit(0xb, PCON1_EXT_PROTOCOL, bit)
+
+	def get_ext_id(self):
+		return self.__get_bit(0x0b, PCON1_EXT_ID)
+	def set_ext_id(self, bit):
+		self.__set_bit(0xb, PCON1_EXT_ID, bit)
+
+	def get_op_1443a(self):
+		return self.__get_bit(0x0e, OPMODE_1443A)
+	def set_op_1443a(self, bit):
+		self.__set_bit(0xe, OPMODE_1443A, bit)
+
+	def get_op_1443b(self):
+		return self.__get_bit(0x0e, OPMODE_1443B)
+	def set_op_1443b(self, bit):
+		self.__set_bit(0xe, OPMODE_1443B, bit)
+
+	def get_op_sr176(self):
+		return self.__get_bit(0x0e, OPMODE_SR176)
+	def set_op_sr176(self, bit):
+		self.__set_bit(0xe, OPMODE_SR176, bit)
+
+	def get_op_icode(self):
+		return self.__get_bit(0x0e, OPMODE_ICODE)
+	def set_op_icode(self, bit):
+		self.__set_bit(0xe, OPMODE_ICODE, bit)
+
+	def get_op_15693(self):
+		return self.__get_bit(0x0e, OPMODE_15693)
+	def set_op_15693(self, bit):
+		self.__set_bit(0xe, OPMODE_15693, bit)
+
+	def get_op_icode_epc(self):
+		return self.__get_bit(0x0e, OPMODE_ICODE_EPC)
+	def set_op_icode_epc(self, bit):
+		self.__set_bit(0xe, OPMODE_ICODE_EPC, bit)
+
+	def get_op_icode_uid(self):
+		return self.__get_bit(0x0e, OPMODE_ICODE_UID)
+	def set_op_icode_uid(self, bit):
+		self.__set_bit(0xe, OPMODE_ICODE_UID, bit)
+	
+	def get_single_shot_tmo(self):
+		return self.__bin[0x0f] * 100
+	def set_single_shot_tmo(self, ms):
+		try:
+			val = int(ms)
+		except ValueErrror:
+			raise ACG_EEPROM_ValueError()
+		self.__bin[0x0f] = val / 100
+
 	def print_info(self):
-		print "Device ID:  0x%.8x"%self.get_dev_id()
-		print "Admin Data: 0x%.8x"%self.get_admin_data()
-		print "Station ID: 0x%.2x"%self.get_station_id()
-		print "Baud rate:  %i"%self.get_baud_rate()
-		print "Guard time: %.3f ms"%self.get_guard()
+		fields = [
+			("Device ID", "0x%.8x", eeprom.get_dev_id),
+			("Admin Data", "0x%.8x", eeprom.get_admin_data),
+			("Station ID", "0x%.2x", eeprom.get_station_id),
+			("Baud rate", "%i", eeprom.get_baud_rate),
+			("Guard time (ms)", "%.3f", eeprom.get_guard),
+			("Auto start", "%r", eeprom.get_auto_start),
+			("Binary protocol", "%r", eeprom.get_binary),
+			("Multitag", "%r", eeprom.get_multitag),
+			("New serial mode", "%r", eeprom.get_new_serial_mode),
+			("Programmed LEDs", "%r", eeprom.get_program_led),
+			("Single shot mode", "%r", eeprom.get_single_shot),
+			("Ext. protocol", "%r", eeprom.get_ext_protocol),
+			("Ext. ID's", "%r", eeprom.get_ext_id),
+			("op: ISO 1443-A", "%r", eeprom.get_op_1443a),
+			("op: ISO 1443-B", "%r", eeprom.get_op_1443b),
+			("op: SR-176", "%r", eeprom.get_op_sr176),
+			("op: ICODE", "%r", eeprom.get_op_icode),
+			("op: ISO 15693", "%r", eeprom.get_op_15693),
+			("op: ICODE-EPC", "%r", eeprom.get_op_icode_epc),
+			("op: ICODE-UID", "%r", eeprom.get_op_icode_uid),
+			("Single shot (ms)", "%u", eeprom.get_single_shot_tmo)
+		]
 
-		pcon1 = self.__bin[0x0b]
-		if pcon1 & PCON1_AUTO_START:
-			print "PCON1:  AUTO_START"
-		else:
-			print "PCON1:  NO AUTO_START"
-		if pcon1 & PCON1_PROTOCOL:
-			print "PCON1:  PROTOCOL: BINARY"
-		else:
-			print "PCON1:  PROTOCOL: ASCII"
-		if pcon1 & PCON1_MULTITAG:
-			print "PCON1:  MULTI_TAG"
-		else:
-			print "PCON1:  SINGLE_TAG"
-		if pcon1 & PCON1_NEW_SERIAL_MODE:
-			print "PCON1:  NEW_SERIAL_MODE"
-		else:
-			print "PCON1:  OLD_SERIAL_MODE"
-		if pcon1 & PCON1_LED:
-			print "PCON1:  AUTOMATIC LED"
-		else:
-			print "PCON1:  PROGRAMMED LED"
-		if pcon1 & PCON1_SINGLE_SHOT:
-			print "PCON1:  SINGLE_SHOT MODE"
-		else:
-			print "PCON1:  NO SINGLE_SHOT MODE"
-		if pcon1 & PCON1_EXT_PROTOCOL:
-			print "PCON1:  EXTENDED PROTOCOL (ISO14443-4 WTX + CHAIN)"
-		else:
-			print "PCON1:  NO EXTENDED PROTOCOL"
-		if pcon1 & PCON1_EXT_ID:
-			print "PCON1:  EXTENDED ID"
-		else:
-			print "PCON1:  NO EXTENDED ID"
-
-		opmode = self.__bin[0x0e]
-		if opmode & OPMODE_1443A:
-			print "OPMODE: ISO 1443-A"
-		if opmode & OPMODE_1443B:
-			print "OPMODE: ISO 1443-B"
-		if opmode & OPMODE_SR176:
-			print "OPMODE: SR176"
-		if opmode & OPMODE_ICODE:
-			print "OPMODE: ICODE"
-		if opmode & OPMODE_15693:
-			print "OPMODE: ISO 15693"
-		if opmode & OPMODE_ICODE_EPC:
-			print "OPMODE: ICODE EPC"
-		if opmode & OPMODE_ICODE_UID:
-			print "OPMODE: ICODE UID"
+		for (name, fmt, getter) in fields:
+			val = getter(self)
+			print ("%-16s: %s"%(name, fmt))%val
