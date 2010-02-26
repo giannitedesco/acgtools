@@ -52,14 +52,33 @@ class acg:
 			if ret[0] == 'R':
 				raise ACG_RangeError(cmd)
 			if ret[0] == 'X':
-				raise ACG_AuthFailure
+				raise ACG_AuthFailure(cmd)
 		return ret
 
 	def dump_eeprom(self, filename):
 		f = open(filename, 'w')
 		f.write(self.__eeprom.binary())
 		f.close()
+	
+	def get_eeprom(self):
+		return self.__eeprom
 
 	def select(self):
 		uid = self.__trancieve("s")
 		return uid
+
+	def mifare_readblock(self, rec):
+		return self.__trancieve("r%.2x"%rec)
+
+	def mifare_login(self, rec, k, keydata = None):
+		cmd = 'l%.2x%.2x\r'%(rec, k)
+		#print cmd
+		try:
+			ret = self.__trancieve(cmd)
+		except ACG_NoTagInField:
+			self.select()
+			ret = self.__trancieve(cmd)
+		if ret == 'L':
+			return True
+		else:
+			return False

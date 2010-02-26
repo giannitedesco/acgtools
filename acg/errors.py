@@ -61,6 +61,6 @@ class ACG_RangeError(ACG_Exception):
 		self.cmd = cmd
 		self.msg = "Command parameter out of range: %r"%cmd
 
-class ACG_AuthFailed(ACG_Exception):
+class ACG_AuthFailure(ACG_Exception):
 	def __init__(self, cmd):
 		self.msg = "Authentication failed: %r"%cmd
