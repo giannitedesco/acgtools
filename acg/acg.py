@@ -5,7 +5,7 @@ import time
 class acg:
 	def __read_eeprom(self):
 		eeprom = ''
-		for i in range(0, 0xef):
+		for i in range(0, 0xf0):
 			cmd = "rp%.2X"%i
 			resp = self.__trancieve(cmd)
 			if len(resp) != 2:
