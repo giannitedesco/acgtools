@@ -37,7 +37,7 @@ def do_multiselect(card):
 		print e.msg
 		return
 	for tag in tags:
-		card.select(tag)
+		#card.select(tag)
 		print_tag(tag)
 	print
 
