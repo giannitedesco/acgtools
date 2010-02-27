@@ -26,6 +26,7 @@ class tag:
 		else:
 			raise ACG_BadTag(bin, "Unexpected length: %u"%len(bin))
 
+		self.serial_len = len(bin)
 		slen = len(bin) - 1
 		self.serial = sum(bin[i] << ((slen - i) * 8) \
 					for i in range(slen, -1, -1))

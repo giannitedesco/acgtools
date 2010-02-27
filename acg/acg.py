@@ -31,16 +31,20 @@ class acg:
 		self.__serio.tx("x")
 		self.__banner = self.__serio.peekbuffer(0.25)
 
-		# If device starts in continuous read mode then select
-		# (or infact any command) will return a list of UID's
-		# terminated by 'S', otherwise will work as usual
-		self.__serio.tx("s")
+		# If device starts in continuous read mode then send a
+		# command to abort that and retrieve the tag list
+		self.__serio.tx(".")
 		ret = self.__serio.rx()
-		while len(ret) and ret != 'S':
+		while len(ret) and ret != 'S' and ret != '?':
 			ret = self.__serio.peekbuffer(0.15)
+		self.__cont_read = False
+
+		# Finally the device ought to be in a predictable state
+		# phew
 
 	def __init__(self, line="/dev/ttyUSB0", baud=460800, tracefile=None):
 		self.__serio = serio(line, baud, tracefile)
+		self.__cont_read = True
 		self.__hard_reset()
 		self.__eeprom = None
 
@@ -48,7 +52,7 @@ class acg:
 		self.__serio.tx(cmd)
 		ret = self.__serio.rx()
 		if len(ret) == 0:
-			raise ACG_IOError, "Reader returned nothing"
+			raise ACG_IOError("Reader returned nothing")
 		if len(ret) == 1:
 			if ret[0] == '?':
 				raise ACG_UnknownCommand(cmd[0])
@@ -66,6 +70,10 @@ class acg:
 				raise ACG_RangeError(cmd)
 			if ret[0] == 'X':
 				raise ACG_AuthFailure(cmd)
+			if ret[0] == 'S':
+				print "warn: interleaving commands with" + \
+					"cont. read is dangerous"
+				self.__cont_read = False
 		return ret
 
 	def dump_eeprom(self, filename):
@@ -97,6 +105,27 @@ class acg:
 		uid = self.__trancieve("s")
 		bin = self.__to_bin(uid)
 		return tag(bin)
+
+	def continuous_read(self):
+		if not self.__cont_read:
+			self.__serio.tx("c")
+			self.__cont_read = True
+
+		uid = self.__serio.rx()
+		if uid == 'S':
+			self.__cont_read = False
+			return None
+		bin = self.__to_bin(uid)
+		return tag(bin)
+	
+	def abort_continuous_read(self):
+		if not self.__cont_read:
+			return
+		ret = self.__trancieve(".")
+		while ret != 'S':
+			print "additional tags after abort"
+			ret = self.__serio.rx()
+		self.__cont_read = False
 
 	def mifare_readblock(self, rec):
 		return self.__trancieve("r%.2x"%rec)

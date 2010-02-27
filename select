@@ -2,23 +2,42 @@
 
 import acg
 
-def do_device(card):
+def print_tag(tag):
+	fmt = "Found %%s tag with serial 0x%%.%dx"%(tag.serial_len*2)
+	print fmt%(tag.typename, tag.serial)
+	if tag.type == tag.TAG_TYPE_ISO_1443A:
+		clevel = {
+				tag.CASCADE_LEVEL1: 1,
+				tag.CASCADE_LEVEL2: 2,
+				tag.CASCADE_LEVEL3: 3,
+			}
+		if clevel.has_key(tag.cascade):
+			print "  Cascade level %u"%clevel[tag.cascade]
+	elif tag.type == tag.TAG_TYPE_ISO_1443B:
+		return
+
+def do_continuous(card):
+	prev_tag = None
+	while True:
+		try:
+			#tag = card.select()
+			tag = card.continuous_read()
+			if not tag:
+				return
+		except acg.ACG_Exception, e:
+			print e.msg
+			return
+		if not prev_tag or tag.serial != prev_tag.serial:
+			print_tag(tag)
+		prev_tag = tag
+
+def do_select(card):
 	try:
 		tag = card.select()
-		print "Found %s tag with serial 0x%x"%(tag.typename, tag.serial)
-		if tag.type == tag.TAG_TYPE_ISO_1443A:
-			clevel = {
-					tag.CASCADE_LEVEL1: 1,
-					tag.CASCADE_LEVEL2: 2,
-					tag.CASCADE_LEVEL3: 3,
-				}
-			if clevel.has_key(tag.cascade):
-				print "  Cascade level %u"%clevel[tag.cascade]
-		elif tag.type == tag.TAG_TYPE_ISO_1443B:
-			pass
 	except acg.ACG_Exception, e:
 		print e.msg
 		return
+	print_tag(tag)
 
 if __name__ == '__main__':
 	for dev in acg.get_devlist():
@@ -34,5 +53,6 @@ if __name__ == '__main__':
 			print
 			continue
 
-		do_device(card)
+		#do_select(card)
+		do_continuous(card)
 
