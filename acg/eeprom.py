@@ -370,6 +370,33 @@ class eeprom:
 		"Ext. REQA"
 		self.__set_bit(0x1b, PCON3_EXT_REQA, bit)
 
+	def get_page_start(self):
+		"Start Page"
+		return self.__bin[0x1c]
+	def set_page_start(self, ms):
+		"Start Page"
+		self.__set_byte(0x1c, ms)
+
+	def get_int1(self):
+		"Internal byte 1"
+		return self.__bin[0x1d]
+	def set_int1(self, ms):
+		"Internal byte 1"
+		raise ACG_EEPROM_ValueError("Internal bytes are read only")
+
+	def get_int2(self):
+		"Internal byte 2"
+		return self.__bin[0x1e]
+	def set_int2(self, ms):
+		"Internal byte 2"
+		raise ACG_EEPROM_ValueError("Internal bytes are read only")
+
+	def get_page_end(self):
+		"Start Page"
+		return self.__bin[0x1f]
+	def set_page_end(self, ms):
+		"End page)"
+		self.__set_byte(0x1f, ms)
 
 	def __dump(self, src, length=16):
 		FILTER = ''.join([(len(repr(chr(x)))==3) \
@@ -422,13 +449,17 @@ class eeprom:
 			("%r", eeprom.get_auto_tmo),
 			("%r", eeprom.get_page_read),
 			("%r", eeprom.get_ext_reqa),
+			("0x%.2x", eeprom.get_page_start),
+			("0x%.2x", eeprom.get_int1),
+			("0x%.2x", eeprom.get_int2),
+			("0x%.2x", eeprom.get_page_end),
 		]
 
 		for (fmt, getter) in fields:
 			val = getter(self)
 			print ("  %-18s: %s"%(getter.__doc__, fmt))%val
 
-		print "  Slack data:"
-		print self.__dump("".join(map(chr, self.__bin[0x1c:0x80])))
+		print "  RFU data:"
+		print self.__dump("".join(map(chr, self.__bin[0x20:0x80])))
 		print "  User data:"
 		print self.__dump("".join(map(chr, self.__bin[0x80:])))
