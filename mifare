@@ -4,8 +4,8 @@ import acg
 
 def do_device(card):
 	try:
-		uid = card.select()
-		print "found tag with ID %s"%uid
+		tag = card.select()
+		print "found tag with ID %s"%tag.serial_str
 	except acg.ACG_Exception, e:
 		print e.msg
 		return
@@ -13,16 +13,16 @@ def do_device(card):
 	for rec in range(0, 0x40):
 		for k in [0xaa, 0xbb, 0xff]:
 			try:
-				card.select()
-			except acg.ACG_NoTagInField:
-				print "Card went away"
-				return
-			try:
-				ret = card.mifare_login(rec, k)
-			except acg.ACG_Exception, e:
-				ret = False
-			if not ret:
+				card.mifare_login(rec, k)
+			except acg.ACG_AuthFailure:
 				continue
+			except acg.ACG_NoTagInField:
+				card.select()
+				try:
+					card.mifare_login(rec, k)
+				except acg.ACG_AuthFailure:
+					continue
+
 			try:
 				data = card.mifare_readblock(rec)
 			except:
@@ -38,10 +38,9 @@ if __name__ == '__main__':
 			card = acg.acg(line=dev.tty,
 					baud = dev.suggested_baud,
 					tracefile="acgtool.trace")
+			do_device(card)
 		except acg.ACG_Exception, e:
 			print "ERROR: %s"%e.msg
 			print
 			continue
-
-		do_device(card)
 
