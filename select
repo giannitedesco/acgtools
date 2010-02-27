@@ -14,6 +14,11 @@ def print_tag(tag):
 			print "  Cascade level %u"%clevel[tag.cascade]
 	elif tag.type == tag.TAG_TYPE_ISO_1443B:
 		return
+	if tag.baud != tag.BAUD_UNKNOWN or \
+		tag.frame_size != tag.FRAME_SIZE_UNKNOWN:
+		print "  Baud rate %uk, frame size %u bytes"%(
+			tag.baud and tag.baud or "UNKNOWN",
+			tag.frame_size and tag.frame_size or "UNKNOWN")
 
 def do_continuous(card):
 	prev_tag = None
