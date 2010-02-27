@@ -98,6 +98,30 @@ class acg:
 		self.__eeprom = eeprom(self.__read_eeprom())
 		return self.__eeprom
 
+	def __rate_settings(self, byte):
+		hi = byte >> 4
+		lo = byte & 0xf
+		rate = {
+			0x0: 106,
+			0x2: 212,
+			0x4: 424,
+			0x8: 848
+		}
+		fsztab = [16, 24, 32, 40, 48, 64, 96, 128, 256]
+		baud = None
+		fsz = None
+		if rate.has_key(lo):
+			baud = rate[lo]
+		if hi < len(fsztab):
+			fsz = fsztab[hi]
+		return (baud, fsz)
+
+	def hselect(self):
+		uid = asc2bin(self.__trancieve("h08"))
+		speed = ord(uid[-1:])
+		(baud, fsz) = self.__rate_settings(speed)
+		return tag(uid[:-1], baud, fsz)
+
 	def select(self, stag = None):
 		if not stag:
 			uid = self.__trancieve("s")
