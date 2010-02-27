@@ -38,6 +38,7 @@ class acg:
 
 	def __init__(self, line="/dev/ttyUSB0", baud=460800, tracefile=None):
 		self.__serio = serio(line, baud, tracefile)
+		self.__hard_reset()
 		self.__eeprom = eeprom(self.__read_eeprom())
 
 	def __trancieve(self, cmd):
