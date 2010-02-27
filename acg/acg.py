@@ -48,8 +48,7 @@ class acg:
 		self.__hard_reset()
 		self.__eeprom = None
 
-	def __trancieve(self, cmd):
-		self.__serio.tx(cmd)
+	def __rx(self, cmd):
 		ret = self.__serio.rx()
 		if len(ret) == 0:
 			raise ACG_IOError("Reader returned nothing")
@@ -70,11 +69,15 @@ class acg:
 				raise ACG_RangeError(cmd)
 			if ret[0] == 'X':
 				raise ACG_AuthFailure(cmd)
-			if ret[0] == 'S':
+			if not cmd in ['c', '.']:
 				print "warn: interleaving commands with" + \
 					"cont. read is dangerous"
 				self.__cont_read = False
 		return ret
+
+	def __trancieve(self, cmd):
+		self.__serio.tx(cmd)
+		return self.__rx(cmd)
 
 	def dump_eeprom(self, filename):
 		if not self.__eeprom:
@@ -101,22 +104,37 @@ class acg:
 			ascii = ascii[2:]
 		return bytearray(arr)
 
-	def select(self):
-		uid = self.__trancieve("s")
-		bin = self.__to_bin(uid)
-		return tag(bin)
+	def select(self, stag = None):
+		if not stag:
+			uid = self.__trancieve("s")
+			return tag(self.__to_bin(uid))
+		else:
+			uid = self.__trancieve("m%s\r"%stag.serial_str)
+			newtag = tag(self.__to_bin(uid))
+			if not newtag == stag:
+				raise ACG_NoTagInField
+			return stag
+
+	def multi_select(self):
+		uid = self.__serio.tx("m\r")
+		uid = self.__rx('m\r')
+		ret = []
+		while len(uid) > 2:
+			t = tag(self.__to_bin(uid))
+			ret.append(t)
+			uid = self.__rx('m\r')
+		return ret
 
 	def continuous_read(self):
 		if not self.__cont_read:
 			self.__serio.tx("c")
 			self.__cont_read = True
 
-		uid = self.__serio.rx()
+		uid = self.__rx('c')
 		if uid == 'S':
 			self.__cont_read = False
 			return None
-		bin = self.__to_bin(uid)
-		return tag(bin)
+		return tag(self.__to_bin(uid))
 	
 	def abort_continuous_read(self):
 		if not self.__cont_read:
@@ -124,7 +142,7 @@ class acg:
 		ret = self.__trancieve(".")
 		while ret != 'S':
 			print "additional tags after abort"
-			ret = self.__serio.rx()
+			ret = self.__rx('.')
 		self.__cont_read = False
 
 	def mifare_readblock(self, rec):

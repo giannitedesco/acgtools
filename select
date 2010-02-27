@@ -3,8 +3,7 @@
 import acg
 
 def print_tag(tag):
-	fmt = "Found %%s tag with serial 0x%%.%dx"%(tag.serial_len*2)
-	print fmt%(tag.typename, tag.serial)
+	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
 	if tag.type == tag.TAG_TYPE_ISO_1443A:
 		clevel = {
 				tag.CASCADE_LEVEL1: 1,
@@ -31,6 +30,17 @@ def do_continuous(card):
 			print_tag(tag)
 		prev_tag = tag
 
+def do_multiselect(card):
+	try:
+		tags = card.multi_select()
+	except acg.ACG_Exception, e:
+		print e.msg
+		return
+	for tag in tags:
+		card.select(tag)
+		print_tag(tag)
+	print
+
 def do_select(card):
 	try:
 		tag = card.select()
@@ -54,5 +64,6 @@ if __name__ == '__main__':
 			continue
 
 		#do_select(card)
-		do_continuous(card)
+		do_multiselect(card)
+		#do_continuous(card)
 
