@@ -3,18 +3,12 @@
 import acg
 
 def do_device(card):
-	eeprom_fn = "acg-eeprom.bin";
-	#card.dump_eeprom(eeprom_fn)
-	#print "Dumped EEPROM: %s"%eeprom_fn
-	#print "Flashing EEPROM: %s"%eeprom_fn
-	#card.flash_eeprom(eeprom_fn)
-
 	try:
 		uid = card.select()
 		print "found tag with ID %s"%uid
 	except acg.ACG_Exception, e:
 		print e.msg
-		raise SystemExit
+		return
 	
 	for rec in range(0, 0x40):
 		for k in [0xaa, 0xbb, 0xff]:
@@ -22,7 +16,7 @@ def do_device(card):
 				card.select()
 			except acg.ACG_NoTagInField:
 				print "Card went away"
-				raise SystemExit
+				return
 			try:
 				ret = card.mifare_login(rec, k)
 			except acg.ACG_Exception, e:
