@@ -1,4 +1,5 @@
 from errors import ACG_EEPROM_Error, ACG_EEPROM_ValueError
+from util import bin2uint
 
 EEPROM_BYTES 		= 0xf0
 EEPROM_READONLY		= 0x0a
@@ -46,16 +47,14 @@ class eeprom:
 	
 	def get_dev_id(self):
 		"Device ID"
-		return int("".join(map(lambda x:"%.2x"%x,
-					self.__bin[0:4])), 16)
+		return bin2uint(self__bin[0:4])
 	def set_dev_id(self, dev_id):
 		"Device ID"
 		raise ACG_EEPROM_ValueError("Device ID is read-only")
 
 	def get_admin_data(self):
 		"Admin data"
-		return int("".join(map(lambda x:"%.2x"%x,
-					self.__bin[4:8])), 16)
+		return bin2uint(self.__bin[4:8])
 	def set_admin_data(self, dev_id):
 		"Admin data"
 		raise ACG_EEPROM_ValueError("Admin data is read-only")

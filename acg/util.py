@@ -13,5 +13,4 @@ def bin2asc(binary):
 
 def bin2uint(binary):
 	"Convert big-endian binary integer to python integer"
-	l = len(binary)
-	return sum(binary[i] << ((l - i) * 8) for i in range(0, l))
+	return int("".join(map(lambda x:"%.2x"%x,binary)), 16)
