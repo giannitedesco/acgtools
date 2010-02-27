@@ -1,0 +1,191 @@
+#!/usr/bin/python
+
+import acg
+from acg.util import bin2asc,asc2bin
+from Crypto.Hash import SHA
+from Crypto.Cipher import DES, DES3
+
+class mrz:
+	def __init__(self, mrz):
+		self.mrz_str = mrz
+		self.p_number = mrz[:9]
+		self.p_check = mrz[9]
+		self.country = mrz[10:13]
+		self.dob = mrz[13:19]
+		self.dob_check = mrz[19]
+		self.gender = mrz[20]
+		self.expire = mrz[21:27]
+		self.expire_check = mrz[27]
+		
+
+class passport:
+	ICAO_9303_AID 			= [0xA0, 0x00, 0x00, 0x02,
+						0x47, 0x10, 0x01]
+	ICAO_CTR_ENC			= 1
+	ICAO_CTR_MAC			= 2
+	ISO_7816_SW1_OK			= 0x90
+
+	ISO_7816_SELECT			= 0xa4
+	ISO_7816_SELECT_DF		= 0x1
+	ISO_7816_SELECT_EF		= 0x2
+	ISO_7816_SELECT_PARENT		= 0x3
+	ISO_7816_SELECT_BY_NAME		= 0x4
+	ISO_7816_SELECT_PATH		= 0x8
+	ISO_7816_SELECT_PATH_REL	= 0x9
+	ISO_7816_SELECT			= 0xa4
+
+	ISO_1170_GET_CHALLENGE		= 0x84
+	ISO_1170_MUTUAL_AUTH		= 0x82
+
+	DES_IV			= "\x00\x00\x00\x00\x00\x00\x00\x00"
+	DES_PAD			= "\x80\x00\x00\x00\x00\x00\x00\x00"
+
+	def __sel(self, p1, p2, data):
+		pdu = bytearray([0, self.ISO_7816_SELECT,
+				p1, p2, len(data)]) + data
+		return self.card.apdu(pdu)
+
+	def __get_challenge(self, len = 8):
+		pdu = bytearray([0, self.ISO_1170_GET_CHALLENGE, 0, 0, len])
+		return self.card.apdu(pdu)
+
+	def __mutual_auth(self, auth):
+		pdu = bytearray([0, self.ISO_1170_MUTUAL_AUTH, 0, 0, len(auth)])
+		pdu += auth
+		pdu += chr(len(auth))
+		return self.card.apdu(pdu)
+
+	def __init__(self, card):
+		self.card = card
+		self.tag = card.hselect()
+		(data, sw1, sw2) = self.__sel(self.ISO_7816_SELECT_BY_NAME,
+						0xc,
+						bytearray(self.ICAO_9303_AID))
+		if sw1 != self.ISO_7816_SW1_OK:
+			raise TypeError, "Not a valid passport"
+
+	def __des_parity(self,data):
+        	adjusted= ''
+        	for x in range(len(data)):
+                	y= ord(data[x]) & 0xfe
+                	parity= 0
+                	for z in range(8):
+                        	parity += y >>  z & 1
+                	adjusted += chr(y + (not parity % 2))
+        	return adjusted
+	def __get_key(self, type, len = 16):
+		D = self.kseed + bytearray([0, 0, 0, chr(type)])
+		sha = SHA.new(str(D))
+		hash = self.__des_parity(sha.digest()[:len])
+		return bytearray(hash)
+	
+	def __kseed(self, mrz):
+		print "  Passport: %s check digit %s"%(mrz.p_number,
+							mrz.p_check)
+		print "  Country: %s"%mrz.country
+		print "  Date of birth: %s check digit %s"%(mrz.dob,
+							mrz.dob_check)
+		print "  Gender: %s"%mrz.gender
+		print "  Expiry date: %s check digit %s"%(mrz.expire,
+							mrz.expire_check)
+		kmrz = mrz.p_number + mrz.p_check + \
+			mrz.dob + mrz.dob_check + \
+			mrz.expire + mrz.expire_check
+
+		sha = SHA.new(kmrz)
+		kseed = sha.digest()[:16]
+		return (kmrz, bytearray(kseed))
+
+	def __enc(self, kenc, msg):
+		des = DES3.new(str(kenc), DES.MODE_CBC, self.DES_IV)
+		return bytearray(des.encrypt(str(msg)))
+
+	def __mac(self, kmac, message):
+		desa = DES.new(str(kmac[0:8]), DES.MODE_ECB, self.DES_IV)
+		desb = DES.new(str(kmac[8:16]), DES.MODE_ECB, self.DES_IV)
+		msg = message + self.DES_PAD
+		mac = bytearray(self.DES_IV)
+        	for y in range(0, len(msg), 8):
+                	current= msg[y:y + 8]
+			mac2 = bytearray()
+                	for x in range(len(mac)):
+				mac2 += chr(mac[x] ^ current[x])
+                	mac= bytearray(desa.encrypt(str(mac2)))
+        	mac= desb.decrypt(str(mac))
+        	return bytearray(desa.encrypt(mac))
+
+	def authenticate(self, mrz):
+		(self.kmrz, self.kseed) = self.__kseed(mrz)
+		print "  Kmrz = %s"%self.kmrz
+		print "  Kseed = %s"%bin2asc(self.kseed)
+
+		self.kenc = self.__get_key(self.ICAO_CTR_ENC)
+		self.kmac = self.__get_key(self.ICAO_CTR_MAC)
+		print "  Kenc = %s"%bin2asc(self.kenc)
+		print "  Kmac = %s"%bin2asc(self.kmac)
+
+		(d, sw1, sw2) = self.__get_challenge()
+		if sw1 != self.ISO_7816_SW1_OK:
+			raise Exception("GET_CHALLENGE failed")
+		rnd_icc = d
+		print "  RND.ICC = %s"%(bin2asc(rnd_icc))
+
+		# FIXME: should be random, like this for debug purposes
+		rnd_ifd = asc2bin("1ae2d116b21e7f7f")
+		k_ifid = asc2bin("8242a7139733d7f2a8b8ed7697122a7e")
+
+		S = rnd_ifd + rnd_icc + k_ifid
+		print "  S = %s"%bin2asc(S)
+
+		e_ifd = self.__enc(self.kenc, S)
+		m_ifd = self.__mac(self.kmac, e_ifd)
+		print "  Eifd = %s"%bin2asc(e_ifd)
+		print "  Mifd = %s"%bin2asc(m_ifd)
+		(d, sw1, sw2) = self.__mutual_auth(e_ifd + m_ifd)
+		if sw1 != self.ISO_7816_SW1_OK:
+			raise Exception("MUTUAL_AUTH failed")
+
+
+def do_passport(card):
+	p = passport(card)
+	print_tag(p.tag)
+	print "\nValid passport application"
+	m = mrz("8008367903GBR8108153M1809233<<<<<<<<<<<<<<00")
+	p.authenticate(m)
+
+def print_tag(tag):
+	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
+	if tag.type == tag.TAG_TYPE_ISO_1443A:
+		clevel = {
+				tag.CASCADE_LEVEL1: 1,
+				tag.CASCADE_LEVEL2: 2,
+				tag.CASCADE_LEVEL3: 3,
+			}
+		if clevel.has_key(tag.cascade):
+			print "  Cascade level %u"%clevel[tag.cascade]
+	elif tag.type == tag.TAG_TYPE_ISO_1443B:
+		return
+	if tag.baud != tag.BAUD_UNKNOWN or \
+		tag.frame_size != tag.FRAME_SIZE_UNKNOWN:
+		print "  Baud rate %s, frame size %s bytes"%(
+			tag.baud and str(tag.baud) + "k" or "UNKNOWN",
+			tag.frame_size and tag.frame_size or "UNKNOWN")
+	if tag.ats:
+		print "  ATS: %s"%bin2asc(tag.ats)
+	return
+
+if __name__ == '__main__':
+	for dev in acg.get_devlist():
+		print dev.vendor
+		print dev.product
+		print "%s @ %u baud"%(dev.tty, dev.suggested_baud)
+		try:
+			card = acg.acg(line=dev.tty,
+					baud = dev.suggested_baud,
+					tracefile="acgtool.trace")
+		except acg.ACG_Exception, e:
+			print "ERROR: %s"%e.msg
+			print
+			continue
+
+		do_passport(card)
