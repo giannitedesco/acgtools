@@ -1,0 +1,28 @@
+#!/usr/bin/python
+
+import acg
+
+def do_device(card):
+	try:
+		uid = card.select()
+		print "found tag with ID %s"%uid
+	except acg.ACG_Exception, e:
+		print e.msg
+		return
+
+if __name__ == '__main__':
+	for dev in acg.get_devlist():
+		print dev.vendor
+		print dev.product
+		print "%s @ %u baud"%(dev.tty, dev.suggested_baud)
+		try:
+			card = acg.acg(line=dev.tty,
+					baud = dev.suggested_baud,
+					tracefile="acgtool.trace")
+		except acg.ACG_Exception, e:
+			print "ERROR: %s"%e.msg
+			print
+			continue
+
+		do_device(card)
+
