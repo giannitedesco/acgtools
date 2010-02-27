@@ -26,6 +26,13 @@ class ACG_BadResponse(ACG_Exception):
 		self.resp = resp
 		self.msg = "%r is bad response to command %r"%(resp, cmd)
 
+class ACG_BadTag(ACG_Exception):
+	def __init__(self, tag, msg = None):
+		if not msg:
+			msg = "Bad Tag: %r"%tag
+		self.msg = msg
+		self.tag = tag
+
 # Following errors defiend by the spec
 class ACG_UnknownCommand(ACG_Exception):
 	def __init__(self, cmd_id):

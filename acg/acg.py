@@ -1,6 +1,7 @@
 from errors import *
 from eeprom import *
 from serio import serio
+from tag import tag
 import time
 
 class acg:
@@ -85,9 +86,17 @@ class acg:
 		self.__eeprom = eeprom(self.__read_eeprom())
 		return self.__eeprom
 
+	def __to_bin(self, ascii):
+		arr = []
+		while len(ascii) >= 2:
+			arr.append(chr(int(ascii[:2], 16)))
+			ascii = ascii[2:]
+		return bytearray(arr)
+
 	def select(self):
 		uid = self.__trancieve("s")
-		return uid
+		bin = self.__to_bin(uid)
+		return tag(bin)
 
 	def mifare_readblock(self, rec):
 		return self.__trancieve("r%.2x"%rec)

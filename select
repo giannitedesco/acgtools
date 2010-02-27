@@ -4,8 +4,18 @@ import acg
 
 def do_device(card):
 	try:
-		uid = card.select()
-		print "found tag with ID %s"%uid
+		tag = card.select()
+		print "Found %s tag with serial 0x%x"%(tag.typename, tag.serial)
+		if tag.type == tag.TAG_TYPE_ISO_1443A:
+			clevel = {
+					tag.CASCADE_LEVEL1: 1,
+					tag.CASCADE_LEVEL2: 2,
+					tag.CASCADE_LEVEL3: 3,
+				}
+			if clevel.has_key(tag.cascade):
+				print "  Cascade level %u"%clevel[tag.cascade]
+		elif tag.type == tag.TAG_TYPE_ISO_1443B:
+			pass
 	except acg.ACG_Exception, e:
 		print e.msg
 		return
