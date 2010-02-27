@@ -16,6 +16,12 @@ class serio:
 		self.trace(">>> %r"%cmd)
 		self.__s.write(cmd)
 
+	def peekbuffer(self, tmo=0):
+		self.__s.setTimeout(tmo)
+		ret = self.rx()
+		self.__s.setTimeout(None)
+		return ret
+
 	def rx(self):
 		ret = self.__s.readline()
 		if ret[-1:] == '\n':

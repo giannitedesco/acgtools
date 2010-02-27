@@ -24,7 +24,7 @@ class ACG_BadResponse(ACG_Exception):
 	def __init__(self, cmd, resp):
 		self.cmd = cmd
 		self.resp = resp
-		self.msg = "%r is bad response to command %r"%(cmd, resp)
+		self.msg = "%r is bad response to command %r"%(resp, cmd)
 
 # Following errors defiend by the spec
 class ACG_UnknownCommand(ACG_Exception):

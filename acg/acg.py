@@ -27,19 +27,19 @@ class acg:
 
 	def __hard_reset(self):
 		self.__banner = self.__trancieve("x")
-		time.sleep(0.150)
 
-		# In a work of genius we need to get the list of tags in the
-		# field before we can read the EEPROM to determine whether
-		# we need to get the list of tags in the field
+		# If device starts in continuous read mode then select
+		# (or infact any command) will return a list of UID's
+		# terminated by 'S', otherwise will work as usual
 		self.__serio.tx("s")
-		while self.__serio.rx() != 'S':
-			continue
+		ret = self.__serio.rx()
+		while len(ret) and ret != 'S':
+			ret = self.__serio.peekbuffer(0.15)
 
 	def __init__(self, line="/dev/ttyUSB0", baud=460800, tracefile=None):
 		self.__serio = serio(line, baud, tracefile)
 		self.__hard_reset()
-		self.__eeprom = eeprom(self.__read_eeprom())
+		self.__eeprom = None
 
 	def __trancieve(self, cmd):
 		self.__serio.tx(cmd)
@@ -66,6 +66,8 @@ class acg:
 		return ret
 
 	def dump_eeprom(self, filename):
+		if not self.__eeprom:
+			self.__eeprom = eeprom(self.__read_eeprom())
 		f = open(filename, 'w')
 		f.write(self.__eeprom.binary())
 		f.close()
@@ -78,6 +80,7 @@ class acg:
 		self.__hard_reset()
 
 	def get_eeprom(self):
+		self.__eeprom = eeprom(self.__read_eeprom())
 		return self.__eeprom
 
 	def select(self):
