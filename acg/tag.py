@@ -1,4 +1,5 @@
 from errors import *
+from util import bin2uint,bin2asc
 class tag:
 	TAG_TYPE_UNKNOWN 	= 0
 	TAG_TYPE_ISO_1443A	= 1
@@ -27,10 +28,9 @@ class tag:
 			raise ACG_BadTag(bin, "Unexpected length: %u"%len(bin))
 
 		self.serial_len = len(bin)
-		slen = len(bin) - 1
-		self.serial = sum(bin[i] << ((slen - i) * 8) \
-					for i in range(slen, -1, -1))
-		self.serial_str = ("%%.%dx"%self.serial_len)%self.serial
+		self.serial = bin2uint(bin)
+		self.serial_str = bin2asc(bin)
+
 	def __str__(self):
 		return "tag(0x%x)"%self.serial
 	def __cmp__(a, b):

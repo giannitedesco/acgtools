@@ -2,6 +2,7 @@ from errors import *
 from eeprom import *
 from serio import serio
 from tag import tag
+from util import asc2bin, bin2asc
 import time
 
 class acg:
@@ -97,20 +98,13 @@ class acg:
 		self.__eeprom = eeprom(self.__read_eeprom())
 		return self.__eeprom
 
-	def __to_bin(self, ascii):
-		arr = []
-		while len(ascii) >= 2:
-			arr.append(chr(int(ascii[:2], 16)))
-			ascii = ascii[2:]
-		return bytearray(arr)
-
 	def select(self, stag = None):
 		if not stag:
 			uid = self.__trancieve("s")
-			return tag(self.__to_bin(uid))
+			return tag(asc2bin(uid))
 		else:
 			uid = self.__trancieve("m%s\r"%stag.serial_str)
-			newtag = tag(self.__to_bin(uid))
+			newtag = tag(asc2bin(uid))
 			if not newtag == stag:
 				raise ACG_NoTagInField
 			return stag
@@ -120,7 +114,7 @@ class acg:
 		uid = self.__rx('m\r')
 		ret = []
 		while len(uid) > 2:
-			t = tag(self.__to_bin(uid))
+			t = tag(asc2bin(uid))
 			ret.append(t)
 			uid = self.__rx('m\r')
 		return ret
@@ -134,7 +128,7 @@ class acg:
 		if uid == 'S':
 			self.__cont_read = False
 			return None
-		return tag(self.__to_bin(uid))
+		return tag(asc2bin(uid))
 	
 	def abort_continuous_read(self):
 		if not self.__cont_read:
@@ -150,7 +144,6 @@ class acg:
 
 	def mifare_login(self, rec, k, keydata = None):
 		cmd = 'l%.2x%.2x\r'%(rec, k)
-		#print cmd
 		try:
 			ret = self.__trancieve(cmd)
 		except ACG_NoTagInField:
