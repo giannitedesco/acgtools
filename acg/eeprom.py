@@ -84,10 +84,10 @@ class eeprom:
 		self.__bin[0x0c] = chr(baud_rates.index(rate))
 
 	def get_guard(self):
-		"Guart tome (ms)"
+		"Guard time (ms)"
 		return (37.8 * float(self.__bin[0xd])) / 1000.0
 	def set_guard(self, guard):
-		"Guart tome (ms)"
+		"Guard time (ms)"
 		try:
 			g = float(guard)
 		except:
