@@ -26,7 +26,9 @@ class acg:
 			resp = self.__trancieve(cmd)
 
 	def __hard_reset(self):
-		self.__banner = self.__trancieve("x")
+		# Startup message may be disabled in EEPROM
+		self.__serio.tx("x")
+		self.__banner = self.__serio.peekbuffer(0.25)
 
 		# If device starts in continuous read mode then select
 		# (or infact any command) will return a list of UID's
