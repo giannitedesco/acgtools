@@ -78,8 +78,8 @@ class passport:
                         	parity += y >>  z & 1
                 	adjusted += chr(y + (not parity % 2))
         	return adjusted
-	def __get_key(self, type, len = 16):
-		D = self.kseed + bytearray([0, 0, 0, chr(type)])
+	def __get_key(self, seed, type, len = 16):
+		D = seed + bytearray([0, 0, 0, chr(type)])
 		sha = SHA.new(str(D))
 		hash = self.__des_parity(sha.digest()[:len])
 		return bytearray(hash)
@@ -105,6 +105,10 @@ class passport:
 		des = DES3.new(str(kenc), DES.MODE_CBC, self.DES_IV)
 		return bytearray(des.encrypt(str(msg)))
 
+	def __dec(self, kenc, msg):
+		des = DES3.new(str(kenc), DES.MODE_CBC, self.DES_IV)
+		return bytearray(des.decrypt(str(msg)))
+
 	def __mac(self, kmac, message):
 		desa = DES.new(str(kmac[0:8]), DES.MODE_ECB, self.DES_IV)
 		desb = DES.new(str(kmac[8:16]), DES.MODE_ECB, self.DES_IV)
@@ -125,13 +129,20 @@ class passport:
 			ret += chr(self.__rng.getrandbits(8))
 		return ret
 
+	def __xor(self, a, b):
+		assert(len(a) == len(b))
+		out = bytearray()
+		for x in range(len(a)):
+			out += chr(a[x] ^ b[x])
+		return out
+
 	def authenticate(self, mrz):
 		(self.kmrz, self.kseed) = self.__kseed(mrz)
 		print "  Kmrz = %s"%self.kmrz
 		print "  Kseed = %s"%bin2asc(self.kseed)
 
-		self.kenc = self.__get_key(self.ICAO_CTR_ENC)
-		self.kmac = self.__get_key(self.ICAO_CTR_MAC)
+		self.kenc = self.__get_key(self.kseed, self.ICAO_CTR_ENC)
+		self.kmac = self.__get_key(self.kseed, self.ICAO_CTR_MAC)
 		print "  Kenc = %s"%bin2asc(self.kenc)
 		print "  Kmac = %s"%bin2asc(self.kmac)
 
@@ -145,7 +156,7 @@ class passport:
 		rnd_ifd = self.__rand(8)
 		k_ifd = self.__rand(16)
 		print "  RND.ifd = %s"%bin2asc(rnd_ifd)
-		print "  K.ifid = %s"%bin2asc(k_ifd)
+		print "  K.ifd = %s"%bin2asc(k_ifd)
 
 		S = rnd_ifd + rnd_icc + k_ifd
 		print "  S = %s"%bin2asc(S)
@@ -157,6 +168,34 @@ class passport:
 		(d, sw1, sw2) = self.__mutual_auth(e_ifd + m_ifd)
 		if sw1 != self.ISO_7816_SW1_OK:
 			raise Exception("MUTUAL_AUTH failed")
+
+		data = d[:32]
+		mac = d[32:40]
+		emac = self.__mac(self.kmac, data)
+		data = self.__dec(self.kenc, data)
+		if mac != emac:
+			raise Exception("MAC check: %s != %s"%(mac, emac))
+		print "  MAC: %s"%bin2asc(mac)
+		d_rnd_icc = data[:8]
+		d_rnd_ifd = data[8:16]
+		k_icc = data[16:]
+		if d_rnd_icc != rnd_icc:
+			raise Exception("RND.ICC check: %s != %s"%(d_rnd_icc,
+								rnd_icc))
+		if d_rnd_ifd != rnd_ifd:
+			raise Exception("RND.ifd check: %s != %s"%(d_rnd_ifd,
+								rnd_ifd))
+		print "  K.icc: %s"%bin2asc(k_icc)
+		s_seed = self.__xor(k_icc, k_ifd)
+		print "  Session key seed: %s"%bin2asc(s_seed)
+
+		self.ksenc = self.__get_key(s_seed, self.ICAO_CTR_ENC)
+		self.ksmac = self.__get_key(s_seed, self.ICAO_CTR_MAC)
+		print "  Senc = %s"%bin2asc(self.ksenc)
+		print "  Smac = %s"%bin2asc(self.ksmac)
+
+		self.ssc = rnd_icc[:4] + rnd_ifd[:4]
+		print "  Sseq = %s"%bin2asc(self.ssc)
 
 
 def do_passport(card):
