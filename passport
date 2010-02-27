@@ -4,6 +4,7 @@ import acg
 from acg.util import bin2asc,asc2bin
 from Crypto.Hash import SHA
 from Crypto.Cipher import DES, DES3
+import random
 
 class mrz:
 	def __init__(self, mrz):
@@ -58,6 +59,10 @@ class passport:
 	def __init__(self, card):
 		self.card = card
 		self.tag = card.hselect()
+		try:
+			self.__rng = random.SystemRandom()
+		except:
+			self.__rng = random.WinchmannHill()
 		(data, sw1, sw2) = self.__sel(self.ISO_7816_SELECT_BY_NAME,
 						0xc,
 						bytearray(self.ICAO_9303_AID))
@@ -114,6 +119,12 @@ class passport:
         	mac= desb.decrypt(str(mac))
         	return bytearray(desa.encrypt(mac))
 
+	def __rand(self, len):
+		ret = bytearray()
+		for i in range(len):
+			ret += chr(self.__rng.getrandbits(8))
+		return ret
+
 	def authenticate(self, mrz):
 		(self.kmrz, self.kseed) = self.__kseed(mrz)
 		print "  Kmrz = %s"%self.kmrz
@@ -131,10 +142,12 @@ class passport:
 		print "  RND.ICC = %s"%(bin2asc(rnd_icc))
 
 		# FIXME: should be random, like this for debug purposes
-		rnd_ifd = asc2bin("1ae2d116b21e7f7f")
-		k_ifid = asc2bin("8242a7139733d7f2a8b8ed7697122a7e")
+		rnd_ifd = self.__rand(8)
+		k_ifd = self.__rand(16)
+		print "  RND.ifd = %s"%bin2asc(rnd_ifd)
+		print "  K.ifid = %s"%bin2asc(k_ifd)
 
-		S = rnd_ifd + rnd_icc + k_ifid
+		S = rnd_ifd + rnd_icc + k_ifd
 		print "  S = %s"%bin2asc(S)
 
 		e_ifd = self.__enc(self.kenc, S)
