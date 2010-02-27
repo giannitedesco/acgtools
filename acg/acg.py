@@ -69,8 +69,8 @@ class acg:
 				raise ACG_RangeError(cmd)
 			if ret[0] == 'X':
 				raise ACG_AuthFailure(cmd)
-			if not cmd in ['c', '.']:
-				print "warn: interleaving commands with" + \
+			if ret[0] == 'S' and not cmd in ['c', '.']:
+				print "warn: interleaving commands with " + \
 					"cont. read is dangerous"
 				self.__cont_read = False
 		return ret
