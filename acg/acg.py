@@ -163,6 +163,15 @@ class acg:
 			ret = self.__rx('.')
 		self.__cont_read = False
 
+	def apdu(self, pdu):
+		ret = self.__trancieve("t%.2x1f02%s"%(len(pdu) + 1,
+							bin2asc(pdu)))
+		bin = asc2bin(ret)
+		if len(bin) < 4:
+			raise ACG_IOError("Bad PDU response: %s"%ret)
+		bin = bin[2:]
+		return (bin[:-2], ord(bin[-2:-1]), ord(bin[-1:]))
+
 	def mifare_readblock(self, rec):
 		return self.__trancieve("r%.2x"%rec)
 
