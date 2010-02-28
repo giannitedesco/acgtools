@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import acg
-from acg.util import bin2asc,asc2bin
+from acg.util import bin2asc,asc2bin,uint2bin,bin2uint
 from Crypto.Hash import SHA
 from Crypto.Cipher import DES, DES3
 import random
@@ -20,8 +20,9 @@ class mrz:
 		
 
 class passport:
-	ICAO_9303_AID 			= [0xA0, 0x00, 0x00, 0x02,
-						0x47, 0x10, 0x01]
+	ICAO_9303_AID 			= bytearray([0xA0, 0x00, 0x00, 0x02,
+						0x47, 0x10, 0x01])
+	ICAO_9303_EF_COM		= bytearray([0x01, 0x0e])
 	ICAO_CTR_ENC			= 1
 	ICAO_CTR_MAC			= 2
 	ISO_7816_SW1_OK			= 0x90
@@ -38,23 +39,98 @@ class passport:
 	ISO_1170_GET_CHALLENGE		= 0x84
 	ISO_1170_MUTUAL_AUTH		= 0x82
 
-	DES_IV			= "\x00\x00\x00\x00\x00\x00\x00\x00"
-	DES_PAD			= "\x80\x00\x00\x00\x00\x00\x00\x00"
+	DES_IV				= ''.join('\x00' for i in range(8))
 
-	def __sel(self, p1, p2, data):
+	def __pad(self, m, bits = 64):
+		mask = (bits >> 3) - 1
+		msg = m + chr(0x80)
+		while len(msg) & mask:
+			msg.append(chr(0))
+		return msg
+
+	def __do87(self, msg):
+		do87 = chr(0x87) + chr(len(msg) + 1) + chr(1) + msg
+		return do87
+
+	def __do8e(self, msg):
+		do8e = chr(0x8e) + chr(len(msg)) + msg
+		return do8e
+
+	def __secure_enc(self, apdu):
+		print "  CONSTRUCT SECURE PDU: %s"%bin2asc(apdu)
+
+		# split apdu in to component parts
+		hdr = apdu[:4]
+		lc = apdu[4]
+		le = apdu[5+lc:]
+
+		# mask CLA
+		hdr[0] = 0xc
+		chdr = self.__pad(hdr)
+		print "    hdr: %s"%bin2asc(hdr)
+		print "    cmdhdr: %s"%bin2asc(chdr)
+
+		# pad data
+		if lc:
+			data = apdu[5:5+lc]
+			data = self.__pad(data)
+			print "    lc: 0x%.2x"%lc
+			print "    data: %s"%bin2asc(data)
+			data = self.__enc(self.ksenc, data)
+			print "    encrypted data: %s"%bin2asc(data)
+			do87 = self.__do87(data)
+			print "    DO'87': %s"%bin2asc(do87)
+		else:
+			do87 = ''
+
+		M = chdr + do87
+		print "    M = %s"%bin2asc(M)
+
+		mac = self.__mac(self.ksmac, M, ssc = True)
+		do8e = self.__do8e(mac)
+		print "    MAC = %s"%bin2asc(mac)
+		print "    DO8e = %s"%bin2asc(do8e)
+
+		if len(le):
+			print"    le: 0x%.2x"%le
+		else:
+			le = '\x00'
+
+		pdu = hdr + chr(len(do87 + do8e)) +  do87 + do8e + le
+		print"    FINAL PDU: %s"%bin2asc(pdu)
+		return pdu
+
+	def __secure_dec(self, pdu):
+		return pdu
+
+	def __secure_apdu(self, apdu):
+		pdu = self.__secure_enc(apdu)
+		(d, sw1, sw2) = self.card.apdu(pdu)
+		if not sw1 == self.ISO_7816_SW1_OK:
+			return (d, sw1, sw2)
+		ret = self.__secure_dec(d)
+		return (ret, sw1, sw2)
+
+	def apdu(self, pdu, secure = False):
+		if not secure:
+			return self.card.apdu(pdu)
+		else:
+			return self.__secure_apdu(pdu)
+
+	def __sel(self, p1, p2, data, secure = False):
 		pdu = bytearray([0, self.ISO_7816_SELECT,
 				p1, p2, len(data)]) + data
-		return self.card.apdu(pdu)
+		return self.apdu(pdu, secure = secure)
 
 	def __get_challenge(self, len = 8):
 		pdu = bytearray([0, self.ISO_1170_GET_CHALLENGE, 0, 0, len])
-		return self.card.apdu(pdu)
+		return self.apdu(pdu)
 
 	def __mutual_auth(self, auth):
 		pdu = bytearray([0, self.ISO_1170_MUTUAL_AUTH, 0, 0, len(auth)])
 		pdu += auth
 		pdu += chr(len(auth))
-		return self.card.apdu(pdu)
+		return self.apdu(pdu)
 
 	def __init__(self, card):
 		self.card = card
@@ -65,7 +141,7 @@ class passport:
 			self.__rng = random.WinchmannHill()
 		(data, sw1, sw2) = self.__sel(self.ISO_7816_SELECT_BY_NAME,
 						0xc,
-						bytearray(self.ICAO_9303_AID))
+						self.ICAO_9303_AID)
 		if sw1 != self.ISO_7816_SW1_OK:
 			raise TypeError, "Not a valid passport"
 
@@ -79,7 +155,7 @@ class passport:
                 	adjusted += chr(y + (not parity % 2))
         	return adjusted
 	def __get_key(self, seed, type, len = 16):
-		D = seed + bytearray([0, 0, 0, chr(type)])
+		D = seed + uint2bin(type)
 		sha = SHA.new(str(D))
 		hash = self.__des_parity(sha.digest()[:len])
 		return bytearray(hash)
@@ -109,10 +185,17 @@ class passport:
 		des = DES3.new(str(kenc), DES.MODE_CBC, self.DES_IV)
 		return bytearray(des.decrypt(str(msg)))
 
-	def __mac(self, kmac, message):
+	def __mac(self, kmac, message, ssc = False):
 		desa = DES.new(str(kmac[0:8]), DES.MODE_ECB, self.DES_IV)
 		desb = DES.new(str(kmac[8:16]), DES.MODE_ECB, self.DES_IV)
-		msg = message + self.DES_PAD
+
+		if ssc:
+			self.ssc = uint2bin(bin2uint(self.ssc) + 1, 8)
+			msg = self.__pad(self.ssc + message)
+		else:
+			msg = self.__pad(message)
+		print "MAC msg %s with kmac %s"%(bin2asc(msg), bin2asc(kmac))
+
 		mac = bytearray(self.DES_IV)
         	for y in range(0, len(msg), 8):
                 	current= msg[y:y + 8]
@@ -137,12 +220,12 @@ class passport:
 		return out
 
 	def authenticate(self, mrz):
-		(self.kmrz, self.kseed) = self.__kseed(mrz)
+		(self.kmrz, kseed) = self.__kseed(mrz)
 		print "  Kmrz = %s"%self.kmrz
-		print "  Kseed = %s"%bin2asc(self.kseed)
+		print "  Kseed = %s"%bin2asc(kseed)
 
-		self.kenc = self.__get_key(self.kseed, self.ICAO_CTR_ENC)
-		self.kmac = self.__get_key(self.kseed, self.ICAO_CTR_MAC)
+		self.kenc = self.__get_key(kseed, self.ICAO_CTR_ENC)
+		self.kmac = self.__get_key(kseed, self.ICAO_CTR_MAC)
 		print "  Kenc = %s"%bin2asc(self.kenc)
 		print "  Kmac = %s"%bin2asc(self.kmac)
 
@@ -152,9 +235,10 @@ class passport:
 		rnd_icc = d
 		print "  RND.ICC = %s"%(bin2asc(rnd_icc))
 
-		# FIXME: should be random, like this for debug purposes
-		rnd_ifd = self.__rand(8)
-		k_ifd = self.__rand(16)
+		#rnd_ifd = self.__rand(8)
+		#k_ifd = self.__rand(16)
+		rnd_ifd = bytearray(''.join('\x00' for i in range(8)))
+		k_ifd = bytearray(''.join('\x00' for i in range(16)))
 		print "  RND.ifd = %s"%bin2asc(rnd_ifd)
 		print "  K.ifd = %s"%bin2asc(k_ifd)
 
@@ -196,6 +280,12 @@ class passport:
 
 		self.ssc = rnd_icc[:4] + rnd_ifd[:4]
 		print "  Sseq = %s"%bin2asc(self.ssc)
+
+		(data, sw1, sw2) = self.__sel(self.ISO_7816_SELECT_BY_NAME,
+						0xc,
+						self.ICAO_9303_EF_COM,
+						secure = True)
+		print "%2x %2x %s"%(sw1, sw2, bin2asc(data))
 
 
 def do_passport(card):
