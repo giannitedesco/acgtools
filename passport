@@ -20,11 +20,6 @@ class mrz:
 		
 
 class passport:
-	ICAO_9303_AID 			= bytearray([0xA0, 0x00, 0x00, 0x02,
-						0x47, 0x10, 0x01])
-	ICAO_9303_EF_COM		= bytearray([0x01, 0x1e])
-	ICAO_CTR_ENC			= 1
-	ICAO_CTR_MAC			= 2
 	ISO_7816_SW1_NOT_ALLOWED	= 0x69
 	ISO_7816_SW2_BAD_SM		= 0x88
 	ISO_7816_SW1_OK			= 0x90
@@ -44,6 +39,13 @@ class passport:
 
 	DES_IV				= ''.join('\x00' for i in range(8))
 
+	ICAO_CTR_ENC			= 1
+	ICAO_CTR_MAC			= 2
+	ICAO_9303_AID 			= bytearray([0xA0, 0x00, 0x00, 0x02,
+						0x47, 0x10, 0x01])
+	ICAO_9303_EF_COM		= 0x1e
+	ICAO_9303_EF_SOD		= 0x1d
+
 	def __pad(self, m, bits = 64):
 		mask = (bits >> 3) - 1
 		msg = m + chr(0x80)
@@ -54,7 +56,7 @@ class passport:
 	def __unpad(self, m):
 		if len(m) < 8:
 			raise Exception("Enciphered message too short")
-		for i in range(len(m) - 1, len(m) - 8, -1):
+		for i in range(len(m) - 1, len(m) - 9, -1):
 			if ord(m[-1:]) == 0x80:
 				return m[:-1]
 			m = m[:-1]
@@ -75,8 +77,18 @@ class passport:
 		do97 = chr(0x97) + chr(0x1) + chr(le)
 		return do97
 
+	def __apdu_dbg(self, msg):
+		if not self.__debug_apdu:
+			return
+		print "    " + msg
+
+	def __dbg(self, msg):
+		if not self.__debug:
+			return
+		print "  " + msg
+
 	def __secure_enc(self, apdu):
-		print "  CONSTRUCT SECURE PDU: %s"%bin2asc(apdu)
+		self.__apdu_dbg("CONSTRUCT SECURE PDU: %s"%bin2asc(apdu))
 
 		# split apdu in to component parts
 		hdr = apdu[:4]
@@ -86,25 +98,25 @@ class passport:
 		# mask CLA
 		hdr[0] = 0xc
 		chdr = self.__pad(hdr)
-		print "    hdr: %s"%bin2asc(hdr)
-		print "    cmdhdr: %s"%bin2asc(chdr)
+		self.__apdu_dbg("hdr: %s"%bin2asc(hdr))
+		self.__apdu_dbg("cmdhdr: %s"%bin2asc(chdr))
 
 		# pad data
 		if lc:
 			data = apdu[5:5+lc]
 			data = self.__pad(data)
-			print "    lc: 0x%.2x"%lc
-			print "    data: %s"%bin2asc(data)
+			self.__apdu_dbg("lc: 0x%.2x"%lc)
+			self.__apdu_dbg("data: %s"%bin2asc(data))
 			data = self.__enc(self.ksenc, data)
-			print "    encrypted data: %s"%bin2asc(data)
+			self.__apdu_dbg("encrypted data: %s"%bin2asc(data))
 			# FIXME: DO'85' for ins & 0x1 == True
 			do87 = self.__do87(data)
-			print "    DO'87': %s"%bin2asc(do87)
+			self.__apdu_dbg("DO'87': %s"%bin2asc(do87))
 		else:
 			do87 = ''
 
 		if len(le):
-			print"    le: 0x%.2x"%ord(le)
+			self.__apdu_dbg("le: 0x%.2x"%ord(le))
 			do97 = self.__do97(ord(le))
 			le = '\x00'
 		else:
@@ -112,57 +124,50 @@ class passport:
 			do97 = ''
 
 		M = chdr + do87 + do97
-		print "    M = %s"%bin2asc(M)
+		self.__apdu_dbg("M = %s"%bin2asc(M))
 
 		mac = self.__mac(self.ksmac, M, ssc = True)
 		do8e = self.__do8e(mac)
-		print "    MAC = %s"%bin2asc(mac)
-		print "    DO8e = %s"%bin2asc(do8e)
+		self.__apdu_dbg("MAC = %s"%bin2asc(mac))
+		self.__apdu_dbg("DO8e = %s"%bin2asc(do8e))
 
 		new_lc = chr(len(do87) + len(do97) + len(do8e))
 		pdu = hdr + new_lc + do87 + do97 + do8e + le
-		print"    FINAL PDU: %s"%bin2asc(pdu)
+		self.__apdu_dbg("FINAL PDU: %s"%bin2asc(pdu))
 		return pdu
+
+	def __rip_do(self, rapdu):
+		ret = {}
+		sm = rapdu
+		while len(sm) >= 2:
+			if sm[1] + 2 > len(sm):
+				raise Exception("BAD SM %u", sm[1])
+			if ret.has_key(sm[0]):
+				raise Exception("Duplicate SM")
+			ret[sm[0]] = sm[:2 + sm[1]]
+			self.__apdu_dbg("DO'%2x' (%u bytes) -> %s"%(sm[0],
+							sm[1],
+							bin2asc(ret[sm[0]])))
+			sm = sm[2 + sm[1]:]
+		return ret
 
 	def __secure_dec(self, sw1, sw2, pdu):
 		if not len(pdu):
 			return (pdu, sw1, sw2)
 
-		print"    RAPDU: %s"%bin2asc(pdu)
-		if len(pdu) < 2:
-			raise Exception("Short RAPDU")
+		self.__apdu_dbg("RAPDU: %s"%bin2asc(pdu))
+		do = self.__rip_do(pdu)
 
-		if pdu[0] == 0x87:
-			if pdu[1] + 1 > len(pdu):
-				raise Exception("Bad DO'87' in RAPDU")
-			do87 = pdu[:pdu[1] + 2]
-			pdu = pdu[len(do87):]
+		if not do.has_key(0x99) or not do.has_key(0x8e):
+			raise Exception("Missing DO'99' or DO'8E' in RAPDU")
+
+		do99 = do[0x99]
+		do8e = do[0x8e]
+		if do.has_key(0x87):
+			do87 = do[0x87]
 		else:
 			do87 = ''
 
-		if pdu[0] == 0x99:
-			if pdu[1] + 1 > len(pdu):
-				raise Exception("Bad DO'99' in RAPDU")
-			do99 = pdu[:pdu[1] + 2]
-			pdu = pdu[len(do99):]
-		else:
-			do99 = None
-
-		if pdu[0] == 0x8e:
-			if pdu[1] + 1 > len(pdu):
-				raise Exception("Bad DO'8E' in RAPDU")
-			do8e = pdu[:pdu[1] + 2]
-			pdu = pdu[len(do8e):]
-		else:
-			do8e = None
-
-		if len(pdu):
-			print "    WARN: Trailing data in RAPDU: %s"%\
-				bin2asc(pdu)
-		del pdu
-
-		if not do99 or not do8e:
-			raise Exception("Missing DO'99' or DO'8e' in RAPDU")
 		if len(do99) != 4:
 			raise Exception("Bad length of do99")
 		if len(do8e) != 10:
@@ -176,10 +181,12 @@ class passport:
 
 		if len(do87):
 			if do87[2] != 0x1:
-				print "    WARN: Erroneous padding byte"
+				self.__apdu_dbg("WARN: Erroneous padding byte")
 			ret = self.__unpad(self.__dec(self.ksenc, do87[3:]))
 		else:
 			ret = ''
+		self.__apdu_dbg("FINAL RAPDU: %.2x%.2x %s"%(do99[2], do99[3],
+								bin2asc(ret)))
 		return (ret, do99[2], do99[3])
 
 	def __secure_apdu(self, apdu):
@@ -204,6 +211,10 @@ class passport:
 				p1, p2, len(data)]) + data
 		return self.apdu(pdu, secure = secure)
 
+	def __sel_sfi(self, sfi):
+		fi = chr(1) + chr(sfi)
+		return self.__sel(self.ISO_7816_SELECT_EF, 0xc, fi)
+
 	def __read_binary(self, le, ofs = 0, secure = None):
 		p1 = chr(ofs >> 8)
 		if ord(p1) & 0x80:
@@ -227,6 +238,8 @@ class passport:
 		self.card = card
 		self.tag = card.hselect()
 		self.__secure = False
+		self.__debug_apdu = False
+		self.__debug = True
 		try:
 			self.__rng = random.SystemRandom()
 		except:
@@ -253,14 +266,14 @@ class passport:
 		return bytearray(hash)
 	
 	def __kseed(self, mrz):
-		print "  Passport: %s check digit %s"%(mrz.p_number,
-							mrz.p_check)
-		print "  Country: %s"%mrz.country
-		print "  Date of birth: %s check digit %s"%(mrz.dob,
-							mrz.dob_check)
-		print "  Gender: %s"%mrz.gender
-		print "  Expiry date: %s check digit %s"%(mrz.expire,
-							mrz.expire_check)
+		self.__dbg("Passport: %s check digit %s"%(mrz.p_number,
+							mrz.p_check))
+		self.__dbg("Country: %s"%mrz.country)
+		self.__dbg("Date of birth: %s check digit %s"%(mrz.dob,
+							mrz.dob_check))
+		self.__dbg("Gender: %s"%mrz.gender)
+		self.__dbg("Expiry date: %s check digit %s"%(mrz.expire,
+							mrz.expire_check))
 		kmrz = mrz.p_number + mrz.p_check + \
 			mrz.dob + mrz.dob_check + \
 			mrz.expire + mrz.expire_check
@@ -271,11 +284,13 @@ class passport:
 
 	def __enc(self, kenc, msg):
 		des = DES3.new(str(kenc), DES.MODE_CBC, self.DES_IV)
-		return bytearray(des.encrypt(str(msg)))
+		ret = bytearray(des.encrypt(str(msg)))
+		return ret
 
 	def __dec(self, kenc, msg):
 		des = DES3.new(str(kenc), DES.MODE_CBC, self.DES_IV)
-		return bytearray(des.decrypt(str(msg)))
+		ret = bytearray(des.decrypt(str(msg)))
+		return ret
 
 	def __mac(self, kmac, message, ssc = False):
 		desa = DES.new(str(kmac[0:8]), DES.MODE_ECB, self.DES_IV)
@@ -313,34 +328,34 @@ class passport:
 
 	def authenticate(self, mrz):
 		(self.kmrz, kseed) = self.__kseed(mrz)
-		print "  Kmrz = %s"%self.kmrz
-		print "  Kseed = %s"%bin2asc(kseed)
+		self.__dbg("Kmrz = %s"%self.kmrz)
+		self.__dbg("Kseed = %s"%bin2asc(kseed))
 
 		self.kenc = self.__get_key(kseed, self.ICAO_CTR_ENC)
 		self.kmac = self.__get_key(kseed, self.ICAO_CTR_MAC)
-		print "  Kenc = %s"%bin2asc(self.kenc)
-		print "  Kmac = %s"%bin2asc(self.kmac)
+		self.__dbg("Kenc = %s"%bin2asc(self.kenc))
+		self.__dbg("Kmac = %s"%bin2asc(self.kmac))
 
 		(d, sw1, sw2) = self.__get_challenge()
 		if sw1 != self.ISO_7816_SW1_OK:
 			raise Exception("GET_CHALLENGE failed")
 		rnd_icc = d
-		print "  RND.ICC = %s"%(bin2asc(rnd_icc))
+		self.__dbg("RND.ICC = %s"%(bin2asc(rnd_icc)))
 
-		#rnd_ifd = self.__rand(8)
-		#k_ifd = self.__rand(16)
-		rnd_ifd = bytearray(''.join('\x00' for i in range(8)))
-		k_ifd = bytearray(''.join('\x00' for i in range(16)))
-		print "  RND.ifd = %s"%bin2asc(rnd_ifd)
-		print "  K.ifd = %s"%bin2asc(k_ifd)
+		rnd_ifd = self.__rand(8)
+		k_ifd = self.__rand(16)
+		#rnd_ifd = bytearray(''.join('\x00' for i in range(8)))
+		#k_ifd = bytearray(''.join('\x00' for i in range(16)))
+		self.__dbg("RND.ifd = %s"%bin2asc(rnd_ifd))
+		self.__dbg("K.ifd = %s"%bin2asc(k_ifd))
 
 		S = rnd_ifd + rnd_icc + k_ifd
-		print "  S = %s"%bin2asc(S)
+		self.__dbg("S = %s"%bin2asc(S))
 
 		e_ifd = self.__enc(self.kenc, S)
 		m_ifd = self.__mac(self.kmac, e_ifd)
-		print "  Eifd = %s"%bin2asc(e_ifd)
-		print "  Mifd = %s"%bin2asc(m_ifd)
+		self.__dbg("Eifd = %s"%bin2asc(e_ifd))
+		self.__dbg("Mifd = %s"%bin2asc(m_ifd))
 		(d, sw1, sw2) = self.__mutual_auth(e_ifd + m_ifd)
 		if sw1 != self.ISO_7816_SW1_OK:
 			raise Exception("MUTUAL_AUTH failed")
@@ -351,7 +366,7 @@ class passport:
 		data = self.__dec(self.kenc, data)
 		if mac != emac:
 			raise Exception("MAC check: %s != %s"%(mac, emac))
-		print "  MAC: %s"%bin2asc(mac)
+		self.__dbg("MAC: %s"%bin2asc(mac))
 		d_rnd_icc = data[:8]
 		d_rnd_ifd = data[8:16]
 		k_icc = data[16:]
@@ -361,28 +376,57 @@ class passport:
 		if d_rnd_ifd != rnd_ifd:
 			raise Exception("RND.ifd check: %s != %s"%(d_rnd_ifd,
 								rnd_ifd))
-		print "  K.icc: %s"%bin2asc(k_icc)
+		self.__dbg("K.icc: %s"%bin2asc(k_icc))
 		s_seed = self.__xor(k_icc, k_ifd)
-		print "  Session key seed: %s"%bin2asc(s_seed)
+		self.__dbg("Session key seed: %s"%bin2asc(s_seed))
 
 		self.ksenc = self.__get_key(s_seed, self.ICAO_CTR_ENC)
 		self.ksmac = self.__get_key(s_seed, self.ICAO_CTR_MAC)
-		print "  Senc = %s"%bin2asc(self.ksenc)
-		print "  Smac = %s"%bin2asc(self.ksmac)
+		self.__dbg("Senc = %s"%bin2asc(self.ksenc))
+		self.__dbg("Smac = %s"%bin2asc(self.ksmac))
 
 		self.ssc = rnd_icc[4:] + rnd_ifd[4:]
-		print "  Sseq = %s"%bin2asc(self.ssc)
+		self.__dbg("Sseq = %s"%bin2asc(self.ssc))
 
 		self.__secure = True
 
-		(data, sw1, sw2) = self.__sel(self.ISO_7816_SELECT_EF,
-						0xc,
-						self.ICAO_9303_EF_COM)
-		print "SELECT: %.2x %.2x %s"%(sw1, sw2, bin2asc(data))
-		(data, sw1, sw2) = self.__read_binary(4)
-		print "READ BINARY: %.2x %.2x %s"%(sw1, sw2, bin2asc(data))
-		(data, sw1, sw2) = self.__read_binary(0x12, ofs = 4)
-		print "READ BINARY: %.2x %.2x %s"%(sw1, sw2, bin2asc(data))
+	def __get_data_object(self, sfi):
+		(d, sw1, sw2) = self.__sel_sfi(sfi)
+		if sw1 != self.ISO_7816_SW1_OK:
+			return False
+
+		(hdr, sw1, sw2) = self.__read_binary(4)
+		if sw1 != self.ISO_7816_SW1_OK:
+			raise Exception("ARG")
+
+		len = (hdr[1] + 2) - 4
+		ofs = 4
+		contents = hdr
+
+		while len:
+			if len > 112:
+				rlen = 112
+			else:
+				rlen = len
+			(data, sw1, sw2) = self.__read_binary(rlen, ofs)
+			if sw1 != self.ISO_7816_SW1_OK:
+				raise Exception("ARG")
+			len -= rlen
+			ofs += rlen
+			contents += data
+
+		return contents
+
+
+	def read_ef_com(self):
+		data = self.__get_data_object(self.ICAO_9303_EF_COM)
+		print "  RETRIEVED EF.COM: %s"%bin2asc(data)
+		data = self.__get_data_object(self.ICAO_9303_EF_SOD)
+		print "  RETRIEVED EF.SOD: %s"%bin2asc(data)
+		data = self.__get_data_object(1)
+		print "  RETRIEVED EF.DG1: %s"%bin2asc(data)
+		data = self.__get_data_object(2)
+		print "  RETRIEVED EF.DG2: %s"%bin2asc(data)
 
 
 def do_passport(card):
@@ -391,6 +435,7 @@ def do_passport(card):
 	print "\nValid passport application"
 	m = mrz("8008367903GBR8108153M1809233<<<<<<<<<<<<<<00")
 	p.authenticate(m)
+	p.read_ef_com()
 
 def print_tag(tag):
 	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
