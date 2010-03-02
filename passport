@@ -22,9 +22,11 @@ class mrz:
 class passport:
 	ICAO_9303_AID 			= bytearray([0xA0, 0x00, 0x00, 0x02,
 						0x47, 0x10, 0x01])
-	ICAO_9303_EF_COM		= bytearray([0x01, 0x0e])
+	ICAO_9303_EF_COM		= bytearray([0x01, 0x1e])
 	ICAO_CTR_ENC			= 1
 	ICAO_CTR_MAC			= 2
+	ISO_7816_SW1_NOT_ALLOWED	= 0x69
+	ISO_7816_SW2_BAD_SM		= 0x88
 	ISO_7816_SW1_OK			= 0x90
 
 	ISO_7816_SELECT			= 0xa4
@@ -100,15 +102,35 @@ class passport:
 		print"    FINAL PDU: %s"%bin2asc(pdu)
 		return pdu
 
-	def __secure_dec(self, pdu):
-		return pdu
+	def __secure_dec(self, sw1, sw2, pdu):
+		print"    RAPDU: %s"%bin2asc(pdu)
+		if len(pdu) < 4:
+			raise Exception("Short RAPDU")
+
+		do99 = pdu[:4]
+		do8e = pdu[4:]
+		if do99[0] != 0x99 or do99[1] != 0x2:
+			raise Exception("Bad DO'99' in RAPDU")
+		if do8e[0] != 0x8e or \
+			do8e[1] != 0x8 or \
+			len(do8e) != do8e[1] + 2:
+			raise Exception("Bad DO'8E' in RAPDU")
+
+		mac = do8e[2:]
+		cmac = self.__mac(self.ksmac, do99, ssc = True)
+		if mac != cmac:
+			raise Exception("Bad MAC in RAPDU: %s != %s"%(
+				bin2asc(mac), bin2asc(cmac)))
+
+		return ('', do99[2], do99[3])
 
 	def __secure_apdu(self, apdu):
 		pdu = self.__secure_enc(apdu)
 		(d, sw1, sw2) = self.card.apdu(pdu)
-		if not sw1 == self.ISO_7816_SW1_OK:
+		if sw1 == self.ISO_7816_SW1_NOT_ALLOWED and \
+			sw2 == self.ISO7861_SW2_BAD_SM:
 			return (d, sw1, sw2)
-		ret = self.__secure_dec(d)
+		(ret, sw1, sw2) = self.__secure_dec(sw1, sw2, d)
 		return (ret, sw1, sw2)
 
 	def apdu(self, pdu, secure = False):
@@ -278,14 +300,14 @@ class passport:
 		print "  Senc = %s"%bin2asc(self.ksenc)
 		print "  Smac = %s"%bin2asc(self.ksmac)
 
-		self.ssc = rnd_icc[:4] + rnd_ifd[:4]
+		self.ssc = rnd_icc[4:] + rnd_ifd[4:]
 		print "  Sseq = %s"%bin2asc(self.ssc)
 
-		(data, sw1, sw2) = self.__sel(self.ISO_7816_SELECT_BY_NAME,
+		(data, sw1, sw2) = self.__sel(self.ISO_7816_SELECT_EF,
 						0xc,
 						self.ICAO_9303_EF_COM,
 						secure = True)
-		print "%2x %2x %s"%(sw1, sw2, bin2asc(data))
+		print "%.2x %.2x %s"%(sw1, sw2, bin2asc(data))
 
 
 def do_passport(card):
