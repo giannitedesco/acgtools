@@ -51,6 +51,15 @@ class passport:
 			msg.append(chr(0))
 		return msg
 
+	def __unpad(self, m):
+		if len(m) < 8:
+			raise Exception("Enciphered message too short")
+		for i in range(len(m) - 1, len(m) - 8, -1):
+			if ord(m[-1:]) == 0x80:
+				return m[:-1]
+			m = m[:-1]
+		raise Exception("Enciphered message incorrectly padded")
+
 	def __do87(self, msg):
 		"Build data object for encrypted message"
 		do87 = chr(0x87) + chr(len(msg) + 1) + chr(1) + msg
@@ -168,7 +177,7 @@ class passport:
 		if len(do87):
 			if do87[2] != 0x1:
 				print "    WARN: Erroneous padding byte"
-			ret = self.__dec(self.ksenc, do87[3:])
+			ret = self.__unpad(self.__dec(self.ksenc, do87[3:]))
 		else:
 			ret = ''
 		return (ret, do99[2], do99[3])
@@ -182,26 +191,24 @@ class passport:
 		(ret, sw1, sw2) = self.__secure_dec(sw1, sw2, d)
 		return (ret, sw1, sw2)
 
-	def apdu(self, pdu, secure = False):
+	def apdu(self, pdu, secure = None):
+		if secure == None:
+			secure = self.__secure
 		if not secure:
 			return self.card.apdu(pdu)
 		else:
 			return self.__secure_apdu(pdu)
 
-	def __sel(self, p1, p2, data, secure = False):
+	def __sel(self, p1, p2, data, secure = None):
 		pdu = bytearray([0, self.ISO_7816_SELECT,
 				p1, p2, len(data)]) + data
 		return self.apdu(pdu, secure = secure)
 
-	def __read_binary(self, le, secure = False):
-		# If bit8=1 in P1, then bit7-6 are set to 0. bit3-1 of P1 are a
-		# short EF (Elementary File) identifier and P2 is the offset of
-		# the first byte to be read in date units from the beginning of
-		# the file.
-		#If bit8=0 in P1, then P1||P2 is the offset of the first byte
-		#to be read in data units from the beginning of the file.
-		p1 = 0
-		p2 = 0
+	def __read_binary(self, le, ofs = 0, secure = None):
+		p1 = chr(ofs >> 8)
+		if ord(p1) & 0x80:
+			raise Exception("Offset must be < %u"%(1<<15))
+		p2 = chr(ofs & 0xff)
 		pdu = bytearray([0, self.ISO_7816_READ_BINARY,
 				p1, p2, 0, chr(le)])
 		return self.apdu(pdu, secure = secure)
@@ -219,6 +226,7 @@ class passport:
 	def __init__(self, card):
 		self.card = card
 		self.tag = card.hselect()
+		self.__secure = False
 		try:
 			self.__rng = random.SystemRandom()
 		except:
@@ -365,12 +373,15 @@ class passport:
 		self.ssc = rnd_icc[4:] + rnd_ifd[4:]
 		print "  Sseq = %s"%bin2asc(self.ssc)
 
+		self.__secure = True
+
 		(data, sw1, sw2) = self.__sel(self.ISO_7816_SELECT_EF,
 						0xc,
-						self.ICAO_9303_EF_COM,
-						secure = True)
+						self.ICAO_9303_EF_COM)
 		print "SELECT: %.2x %.2x %s"%(sw1, sw2, bin2asc(data))
-		(data, sw1, sw2) = self.__read_binary(4, secure = True)
+		(data, sw1, sw2) = self.__read_binary(4)
+		print "READ BINARY: %.2x %.2x %s"%(sw1, sw2, bin2asc(data))
+		(data, sw1, sw2) = self.__read_binary(0x12, ofs = 4)
 		print "READ BINARY: %.2x %.2x %s"%(sw1, sw2, bin2asc(data))
 
 
