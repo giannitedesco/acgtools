@@ -36,7 +36,8 @@ class passport:
 	ISO_7816_SELECT_BY_NAME		= 0x4
 	ISO_7816_SELECT_PATH		= 0x8
 	ISO_7816_SELECT_PATH_REL	= 0x9
-	ISO_7816_SELECT			= 0xa4
+
+	ISO_7816_READ_BINARY		= 0xb0
 
 	ISO_1170_GET_CHALLENGE		= 0x84
 	ISO_1170_MUTUAL_AUTH		= 0x82
@@ -51,12 +52,19 @@ class passport:
 		return msg
 
 	def __do87(self, msg):
+		"Build data object for encrypted message"
 		do87 = chr(0x87) + chr(len(msg) + 1) + chr(1) + msg
 		return do87
 
 	def __do8e(self, msg):
+		"Build data object for MAC"
 		do8e = chr(0x8e) + chr(len(msg)) + msg
 		return do8e
+	
+	def __do97(self, le):
+		"Build data object for protected Le field"
+		do97 = chr(0x97) + chr(0x1) + chr(le)
+		return do97
 
 	def __secure_enc(self, apdu):
 		print "  CONSTRUCT SECURE PDU: %s"%bin2asc(apdu)
@@ -80,12 +88,21 @@ class passport:
 			print "    data: %s"%bin2asc(data)
 			data = self.__enc(self.ksenc, data)
 			print "    encrypted data: %s"%bin2asc(data)
+			# FIXME: DO'85' for ins & 0x1 == True
 			do87 = self.__do87(data)
 			print "    DO'87': %s"%bin2asc(do87)
 		else:
 			do87 = ''
 
-		M = chdr + do87
+		if len(le):
+			print"    le: 0x%.2x"%ord(le)
+			do97 = self.__do97(ord(le))
+			le = '\x00'
+		else:
+			le = '\x00'
+			do97 = ''
+
+		M = chdr + do87 + do97
 		print "    M = %s"%bin2asc(M)
 
 		mac = self.__mac(self.ksmac, M, ssc = True)
@@ -93,36 +110,68 @@ class passport:
 		print "    MAC = %s"%bin2asc(mac)
 		print "    DO8e = %s"%bin2asc(do8e)
 
-		if len(le):
-			print"    le: 0x%.2x"%le
-		else:
-			le = '\x00'
-
-		pdu = hdr + chr(len(do87 + do8e)) +  do87 + do8e + le
+		new_lc = chr(len(do87) + len(do97) + len(do8e))
+		pdu = hdr + new_lc + do87 + do97 + do8e + le
 		print"    FINAL PDU: %s"%bin2asc(pdu)
 		return pdu
 
 	def __secure_dec(self, sw1, sw2, pdu):
+		if not len(pdu):
+			return (pdu, sw1, sw2)
+
 		print"    RAPDU: %s"%bin2asc(pdu)
-		if len(pdu) < 4:
+		if len(pdu) < 2:
 			raise Exception("Short RAPDU")
 
-		do99 = pdu[:4]
-		do8e = pdu[4:]
-		if do99[0] != 0x99 or do99[1] != 0x2:
-			raise Exception("Bad DO'99' in RAPDU")
-		if do8e[0] != 0x8e or \
-			do8e[1] != 0x8 or \
-			len(do8e) != do8e[1] + 2:
-			raise Exception("Bad DO'8E' in RAPDU")
+		if pdu[0] == 0x87:
+			if pdu[1] + 1 > len(pdu):
+				raise Exception("Bad DO'87' in RAPDU")
+			do87 = pdu[:pdu[1] + 2]
+			pdu = pdu[len(do87):]
+		else:
+			do87 = ''
+
+		if pdu[0] == 0x99:
+			if pdu[1] + 1 > len(pdu):
+				raise Exception("Bad DO'99' in RAPDU")
+			do99 = pdu[:pdu[1] + 2]
+			pdu = pdu[len(do99):]
+		else:
+			do99 = None
+
+		if pdu[0] == 0x8e:
+			if pdu[1] + 1 > len(pdu):
+				raise Exception("Bad DO'8E' in RAPDU")
+			do8e = pdu[:pdu[1] + 2]
+			pdu = pdu[len(do8e):]
+		else:
+			do8e = None
+
+		if len(pdu):
+			print "    WARN: Trailing data in RAPDU: %s"%\
+				bin2asc(pdu)
+		del pdu
+
+		if not do99 or not do8e:
+			raise Exception("Missing DO'99' or DO'8e' in RAPDU")
+		if len(do99) != 4:
+			raise Exception("Bad length of do99")
+		if len(do8e) != 10:
+			raise Exception("Bad length of do8e")
 
 		mac = do8e[2:]
-		cmac = self.__mac(self.ksmac, do99, ssc = True)
+		cmac = self.__mac(self.ksmac, do87 + do99, ssc = True)
 		if mac != cmac:
 			raise Exception("Bad MAC in RAPDU: %s != %s"%(
 				bin2asc(mac), bin2asc(cmac)))
 
-		return ('', do99[2], do99[3])
+		if len(do87):
+			if do87[2] != 0x1:
+				print "    WARN: Erroneous padding byte"
+			ret = self.__dec(self.ksenc, do87[3:])
+		else:
+			ret = ''
+		return (ret, do99[2], do99[3])
 
 	def __secure_apdu(self, apdu):
 		pdu = self.__secure_enc(apdu)
@@ -142,6 +191,19 @@ class passport:
 	def __sel(self, p1, p2, data, secure = False):
 		pdu = bytearray([0, self.ISO_7816_SELECT,
 				p1, p2, len(data)]) + data
+		return self.apdu(pdu, secure = secure)
+
+	def __read_binary(self, le, secure = False):
+		# If bit8=1 in P1, then bit7-6 are set to 0. bit3-1 of P1 are a
+		# short EF (Elementary File) identifier and P2 is the offset of
+		# the first byte to be read in date units from the beginning of
+		# the file.
+		#If bit8=0 in P1, then P1||P2 is the offset of the first byte
+		#to be read in data units from the beginning of the file.
+		p1 = 0
+		p2 = 0
+		pdu = bytearray([0, self.ISO_7816_READ_BINARY,
+				p1, p2, 0, chr(le)])
 		return self.apdu(pdu, secure = secure)
 
 	def __get_challenge(self, len = 8):
@@ -216,7 +278,7 @@ class passport:
 			msg = self.__pad(self.ssc + message)
 		else:
 			msg = self.__pad(message)
-		print "MAC msg %s with kmac %s"%(bin2asc(msg), bin2asc(kmac))
+		#print "MAC msg %s with kmac %s"%(bin2asc(msg), bin2asc(kmac))
 
 		mac = bytearray(self.DES_IV)
         	for y in range(0, len(msg), 8):
@@ -307,7 +369,9 @@ class passport:
 						0xc,
 						self.ICAO_9303_EF_COM,
 						secure = True)
-		print "%.2x %.2x %s"%(sw1, sw2, bin2asc(data))
+		print "SELECT: %.2x %.2x %s"%(sw1, sw2, bin2asc(data))
+		(data, sw1, sw2) = self.__read_binary(4, secure = True)
+		print "READ BINARY: %.2x %.2x %s"%(sw1, sw2, bin2asc(data))
 
 
 def do_passport(card):
