@@ -390,6 +390,21 @@ class passport:
 
 		self.__secure = True
 
+	def __ber_decode_len(self, hdr):
+		h = hdr[1:]
+		if not h[0] & 0x80:
+			ret = h[0]
+			hlen = 2
+		else:
+			o = h[0] & 0x7f
+			ret = 0
+			for i in range(o):
+				ret <<= 8
+				ret |= h[i + 1]
+			hlen = 1 + o
+
+		return ret + hlen
+
 	def __get_data_object(self, sfi):
 		(d, sw1, sw2) = self.__sel_sfi(sfi)
 		if sw1 != self.ISO_7816_SW1_OK:
@@ -399,34 +414,39 @@ class passport:
 		if sw1 != self.ISO_7816_SW1_OK:
 			raise Exception("ARG")
 
-		len = (hdr[1] + 2) - 4
+		tlen = self.__ber_decode_len(hdr) - len(hdr)
 		ofs = 4
 		contents = hdr
 
-		while len:
-			if len > 112:
+		while tlen:
+			if tlen > 112:
 				rlen = 112
 			else:
-				rlen = len
+				rlen = tlen
 			(data, sw1, sw2) = self.__read_binary(rlen, ofs)
 			if sw1 != self.ISO_7816_SW1_OK:
-				raise Exception("ARG")
-			len -= rlen
+				raise Exception("ARG %u/%u", rlen, tlen)
+			tlen -= rlen
 			ofs += rlen
 			contents += data
 
 		return contents
 
+	def __to_file(self, fn, data):
+		f = open(fn, 'w')
+		f.write(str(data))
+		f.close()
+		print "  DUMPED FILE: %s"%fn
 
 	def read_ef_com(self):
 		data = self.__get_data_object(self.ICAO_9303_EF_COM)
-		print "  RETRIEVED EF.COM: %s"%bin2asc(data)
+		self.__to_file("EF.COM", data)
 		data = self.__get_data_object(self.ICAO_9303_EF_SOD)
-		print "  RETRIEVED EF.SOD: %s"%bin2asc(data)
+		self.__to_file("EF.SOD", data)
 		data = self.__get_data_object(1)
-		print "  RETRIEVED EF.DG1: %s"%bin2asc(data)
+		self.__to_file("EF.DG1", data)
 		data = self.__get_data_object(2)
-		print "  RETRIEVED EF.DG2: %s"%bin2asc(data)
+		self.__to_file("EF.DG2", data)
 
 
 def do_passport(card):
