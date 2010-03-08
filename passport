@@ -401,7 +401,7 @@ class passport:
 			for i in range(o):
 				ret <<= 8
 				ret |= h[i + 1]
-			hlen = 1 + o
+			hlen = 2 + o
 
 		return ret + hlen
 
