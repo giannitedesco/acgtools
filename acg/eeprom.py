@@ -47,7 +47,7 @@ class eeprom:
 	
 	def get_dev_id(self):
 		"Device ID"
-		return bin2uint(self__bin[0:4])
+		return bin2uint(self.__bin[0:4])
 	def set_dev_id(self, dev_id):
 		"Device ID"
 		raise ACG_EEPROM_ValueError("Device ID is read-only")
