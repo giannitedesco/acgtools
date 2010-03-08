@@ -453,7 +453,7 @@ def do_passport(card):
 	p = passport(card)
 	print_tag(p.tag)
 	print "\nValid passport application"
-	m = mrz("8008367903GBR8108153M1809233<<<<<<<<<<<<<<00")
+	m = mrz("1234567893GBRYYMMDD3SYYMMDD3<<<<<<<<<<<<<<00")
 	p.authenticate(m)
 	p.read_ef_com()
 
