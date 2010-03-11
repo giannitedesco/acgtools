@@ -327,7 +327,7 @@ class passport:
 			out += chr(a[x] ^ b[x])
 		return out
 
-	def authenticate(self, mrz):
+	def basic_access_control(self, mrz):
 		(self.kmrz, kseed) = self.__kseed(mrz)
 		self.__dbg("Kmrz = %s"%self.kmrz)
 		self.__dbg("Kseed = %s"%bin2asc(kseed))
@@ -423,13 +423,27 @@ class passport:
 		f = open(fn, 'w')
 		f.write(str(data))
 		f.close()
-		print "  DUMPED FILE: %s"%fn
 
 	def read_ef_com(self):
 		data = self.__get_data_object(self.ICAO_9303_EF_COM)
 		self.__to_file("EF.COM", data)
 		b = ber.tlv(data)
-		#b.pretty_print()
+
+		lds_ver = b[0x5f01].val
+		uni_ver = b[0x5f36].val
+		taglist = b[0x5c].val
+
+		laa = int(str(lds_ver)[0:2])
+		lbb = int(str(lds_ver)[2:4])
+
+		uaa = int(str(uni_ver)[0:2])
+		ubb = int(str(uni_ver)[2:4])
+		ucc = int(str(uni_ver)[4:6])
+
+		self.lds_ver = "%u.%u"%(laa, lbb)
+		self.unicode_ver = "%u.%u.%u"%(uaa, ubb, ucc)
+		self.taglist = taglist
+		return (self.lds_ver, self.unicode_ver, self.taglist)
 
 	def read_ef_sod(self):
 		data = self.__get_data_object(self.ICAO_9303_EF_SOD)
@@ -453,10 +467,19 @@ def do_passport(card):
 	p = passport(card)
 	print_tag(p.tag)
 	print "\nValid passport application"
+
 	#m = mrz("1234567893GBRYYMMDD3SYYMMDD3<<<<<<<<<<<<<<00")
 	m = mrz("8008367903GBR8108153M1809233<<<<<<<<<<<<<<00")
-	p.authenticate(m)
-	p.read_ef_com()
+
+	p.basic_access_control(m)
+	print "\nBasic Access Control Successful"
+
+	(lds_ver, unicode_ver, taglist) = p.read_ef_com()
+	print "\nRetrieved common data elements"
+	print "  LDS Version: %s"%lds_ver
+	print "  UNICODE Version: %s"%unicode_ver
+	print "  Taglist: %s"%', '.join(map(lambda x: "0x%x"%ord(x),
+					str(taglist)))
 
 	full_mrz = p.read_ef_dg1()
 	print "\nRetrieved MRZ"
