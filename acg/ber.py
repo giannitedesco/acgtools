@@ -91,7 +91,8 @@ class tlv:
 		print tabs + ".len = %u / 0x%x"%(int(self.len), int(self.len))
 		if self.tag.constructed:
 			for x in self:
-				x.pretty_print(indent + 1)
+				for y in x:
+					y.pretty_print(indent + 1)
 		
 	def __init__(self, binary):
 		bin = binary
@@ -117,11 +118,18 @@ class tlv:
 		if self.tag.constructed:
 			while len(bin):
 				item = tlv(bin)
-				self.__items[int(item.tag)] = item
+				if self.__items.has_key(int(item.tag)):
+					self.__items[int(item.tag)].append(item)
+				else:
+					self.__items[int(item.tag)] = [item]
 				bin = bin[len(item):]
 
+	def __cmp__(a, b):
+		return int(a.tag) - int(b.tag)
 	def __iter__(self):
-		return self.__items.values().__iter__()
+		vals = self.__items.values()
+		vals.sort()
+		return vals.__iter__()
 	def has_tag(self, idx):
 		return self.__items.has_key(idx)
 	def __getitem__(self, idx):

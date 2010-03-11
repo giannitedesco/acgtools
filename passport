@@ -429,9 +429,9 @@ class passport:
 		self.__to_file("EF.COM", data)
 		b = ber.tlv(data)
 
-		lds_ver = b[0x5f01].val
-		uni_ver = b[0x5f36].val
-		taglist = b[0x5c].val
+		lds_ver = b[0x5f01][0].val
+		uni_ver = b[0x5f36][0].val
+		taglist = b[0x5c][0].val
 
 		laa = int(str(lds_ver)[0:2])
 		lbb = int(str(lds_ver)[2:4])
@@ -455,13 +455,16 @@ class passport:
 		data = self.__get_data_object(1)
 		self.__to_file("EF.DG1", data)
 		b = ber.tlv(data)
-		return b[0x5f1f].val
+		return b[0x5f1f][0].val
 
 	def read_ef_dg2(self):
 		data = self.__get_data_object(2)
 		self.__to_file("EF.DG2", data)
 		b = ber.tlv(data)
-		#b.pretty_print()
+		b.pretty_print()
+
+		biodata = b[0x7f61][0][0x7f60][0][0x5f2e][0]
+		print biodata
 
 def do_passport(card):
 	p = passport(card)
@@ -485,6 +488,8 @@ def do_passport(card):
 	print "\nRetrieved MRZ"
 	print "  " + full_mrz[:44]
 	print "  " + full_mrz[44:]
+
+	p.read_ef_dg2()
 
 def print_tag(tag):
 	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
