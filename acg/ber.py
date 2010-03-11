@@ -112,16 +112,18 @@ class tlv:
 		self.val = bin[:int(tln)]
 		self.__len = len(self.tag) + len(self.len) + len(self.val)
 
-		self.__items = []
+		self.__items = {}
 		bin = self.val
 		if self.tag.constructed:
 			while len(bin):
 				item = tlv(bin)
-				self.__items.append(item)
+				self.__items[int(item.tag)] = item
 				bin = bin[len(item):]
 
 	def __iter__(self):
-		return self.__items.__iter__()
+		return self.__items.values().__iter__()
+	def has_tag(self, idx):
+		return self.__items.has_key(idx)
 	def __getitem__(self, idx):
 		return self.__items[idx]
 	def __len__(self):

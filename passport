@@ -429,22 +429,25 @@ class passport:
 		data = self.__get_data_object(self.ICAO_9303_EF_COM)
 		self.__to_file("EF.COM", data)
 		b = ber.tlv(data)
-		b.pretty_print()
+		#b.pretty_print()
 
+	def read_ef_sod(self):
 		data = self.__get_data_object(self.ICAO_9303_EF_SOD)
 		self.__to_file("EF.SOD", data)
 		b = ber.tlv(data)
-		b.pretty_print()
+		#b.pretty_print()
 
+	def read_ef_dg1(self):
 		data = self.__get_data_object(1)
 		self.__to_file("EF.DG1", data)
 		b = ber.tlv(data)
-		b.pretty_print()
+		return b[0x5f1f].val
 
+	def read_ef_dg2(self):
 		data = self.__get_data_object(2)
 		self.__to_file("EF.DG2", data)
 		b = ber.tlv(data)
-		b.pretty_print()
+		#b.pretty_print()
 
 def do_passport(card):
 	p = passport(card)
@@ -454,6 +457,11 @@ def do_passport(card):
 	m = mrz("8008367903GBR8108153M1809233<<<<<<<<<<<<<<00")
 	p.authenticate(m)
 	p.read_ef_com()
+
+	full_mrz = p.read_ef_dg1()
+	print "\nRetrieved MRZ"
+	print "  " + full_mrz[:44]
+	print "  " + full_mrz[44:]
 
 def print_tag(tag):
 	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
