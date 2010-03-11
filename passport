@@ -18,7 +18,37 @@ class mrz:
 		self.gender = mrz[20]
 		self.expire = mrz[21:27]
 		self.expire_check = mrz[27]
-		
+
+class cbeff:
+	def __init__(self, bin):
+		self.magic = bin[0:4]
+		self.vers = bin[4:8]
+		self.reclen = bin2uint(bin[8:12])
+		self.num_img = bin2uint(bin[12:14])
+		self.block_len = bin2uint(bin[14:18])
+		self.num_features = bin2uint(bin[18:20])
+		self.gender = bin[20]
+		self.eye_color = bin[21]
+		self.hair_color = bin[22]
+		self.feature_mask = bin[23:26]
+		self.expression = bin2uint(bin[26:28])
+		self.pose_angle = bin[28:31]
+		self.pose_angle_uncertainty = bin[31:34]
+
+		features = bin[34:]
+		self.features = features[8 * self.num_features]
+
+		imghdr = features[8 * self.num_features:]
+		self.img_type = imghdr[0]
+		self.img_dtype = imghdr[1]
+		self.img_width = bin2uint(imghdr[2:4])
+		self.img_height = bin2uint(imghdr[4:6])
+		self.img_color_space = imghdr[6]
+		self.img_source_type = imghdr[7]
+		self.img_device_type = imghdr[8:11]
+		self.img_quality = imghdr[11:12]
+
+		self.img = str(imghdr[12:])
 
 class passport:
 	ISO_7816_SW1_NOT_ALLOWED	= 0x69
@@ -461,10 +491,12 @@ class passport:
 		data = self.__get_data_object(2)
 		self.__to_file("EF.DG2", data)
 		b = ber.tlv(data)
-		b.pretty_print()
+		ret = []
 
-		biodata = b[0x7f61][0][0x7f60][0][0x5f2e][0]
-		print biodata
+		for x in b[0x7f61][0][0x7f60]:
+			y = x[0x5f2e][0]
+			ret.append(cbeff(y.val))
+		return ret
 
 def do_passport(card):
 	p = passport(card)
@@ -489,7 +521,15 @@ def do_passport(card):
 	print "  " + full_mrz[:44]
 	print "  " + full_mrz[44:]
 
-	p.read_ef_dg2()
+	cbeffs = p.read_ef_dg2()
+	i = 0
+	print "\nRetrieved Biometric Information"
+	for fac in cbeffs:
+		fn = "face.%u.jpeg"%i
+		f = open(fn, 'w')
+		f.write(fac.img)
+		print "  Wrote image to %s"%fn
+		i += 1
 
 def print_tag(tag):
 	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)

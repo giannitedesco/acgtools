@@ -16,6 +16,7 @@ def bin2uint(binary):
 	return int("".join(map(lambda x:"%.2x"%x,binary)), 16)
 
 def uint2bin(uint, bytes=4):
+	"Convert python integer to a big endian binary encoding"
 	bin = bytearray()
 	r = range(0, bytes << 3, 8)
 	r.reverse()
