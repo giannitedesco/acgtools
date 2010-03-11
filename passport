@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import acg
+from acg import ber
 from acg.util import bin2asc,asc2bin,uint2bin,bin2uint
 from Crypto.Hash import SHA
 from Crypto.Cipher import DES, DES3
@@ -390,21 +391,6 @@ class passport:
 
 		self.__secure = True
 
-	def __ber_decode_len(self, hdr):
-		h = hdr[1:]
-		if not h[0] & 0x80:
-			ret = h[0]
-			hlen = 2
-		else:
-			o = h[0] & 0x7f
-			ret = 0
-			for i in range(o):
-				ret <<= 8
-				ret |= h[i + 1]
-			hlen = 2 + o
-
-		return ret + hlen
-
 	def __get_data_object(self, sfi):
 		(d, sw1, sw2) = self.__sel_sfi(sfi)
 		if sw1 != self.ISO_7816_SW1_OK:
@@ -414,8 +400,9 @@ class passport:
 		if sw1 != self.ISO_7816_SW1_OK:
 			raise Exception("ARG")
 
-		tlen = self.__ber_decode_len(hdr) - len(hdr)
-		ofs = 4
+		tl = ber.taglen(hdr)
+		tlen = int(tl.len) + len(tl) - len(hdr)
+		ofs = len(hdr)
 		contents = hdr
 
 		while tlen:
@@ -441,19 +428,30 @@ class passport:
 	def read_ef_com(self):
 		data = self.__get_data_object(self.ICAO_9303_EF_COM)
 		self.__to_file("EF.COM", data)
+		b = ber.tlv(data)
+		b.pretty_print()
+
 		data = self.__get_data_object(self.ICAO_9303_EF_SOD)
 		self.__to_file("EF.SOD", data)
+		b = ber.tlv(data)
+		b.pretty_print()
+
 		data = self.__get_data_object(1)
 		self.__to_file("EF.DG1", data)
+		b = ber.tlv(data)
+		b.pretty_print()
+
 		data = self.__get_data_object(2)
 		self.__to_file("EF.DG2", data)
-
+		b = ber.tlv(data)
+		b.pretty_print()
 
 def do_passport(card):
 	p = passport(card)
 	print_tag(p.tag)
 	print "\nValid passport application"
-	m = mrz("1234567893GBRYYMMDD3SYYMMDD3<<<<<<<<<<<<<<00")
+	#m = mrz("1234567893GBRYYMMDD3SYYMMDD3<<<<<<<<<<<<<<00")
+	m = mrz("8008367903GBR8108153M1809233<<<<<<<<<<<<<<00")
 	p.authenticate(m)
 	p.read_ef_com()
 
