@@ -1,63 +1,54 @@
 from errors import *
 from util import bin2uint,bin2asc
-class tag:
-	TAG_TYPE_UNKNOWN 	= 0
-	TAG_TYPE_ISO_1443A	= 1
-	TAG_TYPE_ISO_1443B	= 2
 
+class tag:
+	def __init__(self, id):
+		self.serial = id
+		self.serial_str = bin2asc(id)
+		self.baud = None
+		self.frame_size = None
+		self.typename = "UNKNOWN"
+		self.iso1443a = False
+		self.iso1443b = False
+	def set_hispeed(self, baud, frame_size):
+		self.baud = baud
+		self.frame_size = frame_size
+	def __cmp__(a, b):
+		if None == b:
+			return 1
+		return bin2uint(a.serial) - bin2uint(b.serial)
+	
+class iso1443a(tag):
 	CASCADE_LEVEL1		= 0
 	CASCADE_LEVEL2		= 1
 	CASCADE_LEVEL3		= 2
+	def  __init__(self, id, cascade=None, reqa=None):
+		assert(len(id) in [4, 7, 10])
+		tag.__init__(self, id)
+		self.typename = "ISO 1443-A"
+		self.iso1443a = True
+		self.cascade = cascade
+		self.reqa = reqa
+		self.rats = None
+	def set_rats(self, rats):
+		self.rats = rats
 
-	BAUD_UNKNOWN		= 0
-	FRAME_SIZE_UNKNOWN	= 0
+class iso1553b(tag):
+	def __init__(self, id, app=None, protocol=None, cid=None):
+		assert(len(id) == 12)
+		tag.__init__(self, id)
 
-	def __init__(self, bin, baud=None, fsz=None):
-		if len(bin) == 4:
-			self.type = self.TAG_TYPE_UNKNOWN
-			self.typename = "unknown"
-		elif len(bin) == 12:
-			self.type = self.TAG_TYPE_ISO_1443B
-			self.typename = "ISO 1443-B"
-			a = bin[4:8]
-			p = bin[8:11]
-			c = bin[11:]
-			self.app_data = bin2uint(a)
-			self.protocol = bin2uint(p)
-			self.cid = bin2uint(c)
-			bin = bin[:4]
-			print ext
-		elif len(bin) in [5, 8, 11]:
-			self.type = self.TAG_TYPE_ISO_1443A
-			self.typename = "ISO 1443-A"
-			self.cascade = bin[0]
-			self.ats = None
-			bin = bin[1:]
-		else:
-			self.type = self.TAG_TYPE_ISO_1443A
-			self.typename = "ISO 1443-A"
-			self.cascade = bin[0]
-			bin = bin[1:]
+		self.typename = "ISO 1443-B"
+		self.iso1443b = True
 
-			uid_len = 0
-			for x in [4, 7, 10]:
-				if x + bin[x] == len(bin):
-					uid_len = x
-					break
-			if not uid_len:
-				raise ACG_BadTag(bin,
-					"Unexpected length: %u"%len(bin))
-			else:
-				self.ats = bin[uid_len:]
-				bin = bin[:uid_len]
+		if app:
+			assert(len(app) == 4)
+		if protocol:
+			assert(len(protocol) == 3)
+		if cid:
+			assert(len(cid) == 1)
 
-		self.serial_len = len(bin)
-		self.serial = bin2uint(bin)
-		self.serial_str = bin2asc(bin)
-		self.baud = baud and baud or self.BAUD_UNKNOWN
-		self.frame_size = fsz and fsz or self.FRAME_SIZE_UNKNOWN
-
-	def __str__(self):
-		return "tag(0x%x)"%self.serial
-	def __cmp__(a, b):
-		return a.serial - b.serial
+		self.app = app
+		self.protocol = protocol
+		self.cid = cid
+		

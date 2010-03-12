@@ -2,7 +2,7 @@
 
 import acg
 from acg import ber
-from acg.util import bin2asc,asc2bin,uint2bin,bin2uint
+from acg.util import bin2asc,asc2bin,uint2bin,bin2uint,print_tag
 from Crypto.Hash import SHA
 from Crypto.Cipher import DES, DES3
 import random
@@ -530,27 +530,6 @@ def do_passport(card):
 		f.write(fac.img)
 		print "  Wrote image to %s"%fn
 		i += 1
-
-def print_tag(tag):
-	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
-	if tag.type == tag.TAG_TYPE_ISO_1443A:
-		clevel = {
-				tag.CASCADE_LEVEL1: 1,
-				tag.CASCADE_LEVEL2: 2,
-				tag.CASCADE_LEVEL3: 3,
-			}
-		if clevel.has_key(tag.cascade):
-			print "  Cascade level %u"%clevel[tag.cascade]
-	elif tag.type == tag.TAG_TYPE_ISO_1443B:
-		return
-	if tag.baud != tag.BAUD_UNKNOWN or \
-		tag.frame_size != tag.FRAME_SIZE_UNKNOWN:
-		print "  Baud rate %s, frame size %s bytes"%(
-			tag.baud and str(tag.baud) + "k" or "UNKNOWN",
-			tag.frame_size and tag.frame_size or "UNKNOWN")
-	if tag.ats:
-		print "  ATS: %s"%bin2asc(tag.ats)
-	return
 
 if __name__ == '__main__':
 	for dev in acg.get_devlist():

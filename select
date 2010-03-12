@@ -1,30 +1,12 @@
 #!/usr/bin/python
 
 import acg
-
-def print_tag(tag):
-	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
-	if tag.type == tag.TAG_TYPE_ISO_1443A:
-		clevel = {
-				tag.CASCADE_LEVEL1: 1,
-				tag.CASCADE_LEVEL2: 2,
-				tag.CASCADE_LEVEL3: 3,
-			}
-		if clevel.has_key(tag.cascade):
-			print "  Cascade level %u"%clevel[tag.cascade]
-	elif tag.type == tag.TAG_TYPE_ISO_1443B:
-		return
-	if tag.baud != tag.BAUD_UNKNOWN or \
-		tag.frame_size != tag.FRAME_SIZE_UNKNOWN:
-		print "  Baud rate %uk, frame size %u bytes"%(
-			tag.baud and tag.baud or "UNKNOWN",
-			tag.frame_size and tag.frame_size or "UNKNOWN")
+from acg.util import bin2asc, print_tag
 
 def do_continuous(card):
 	prev_tag = None
 	while True:
 		try:
-			#tag = card.select()
 			tag = card.continuous_read()
 			if not tag:
 				return
@@ -48,7 +30,7 @@ def do_multiselect(card):
 
 def do_select(card):
 	try:
-		tag = card.select()
+		ag = card.select()
 	except acg.ACG_Exception, e:
 		print e.msg
 		return
@@ -68,7 +50,7 @@ if __name__ == '__main__':
 			print
 			continue
 
-		#do_select(card)
-		do_multiselect(card)
+		do_select(card)
+		#do_multiselect(card)
 		#do_continuous(card)
 

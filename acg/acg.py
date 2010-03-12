@@ -1,22 +1,26 @@
 from errors import *
 from eeprom import *
 from serio import serio
-from tag import tag
+from tag import tag, iso1443a, iso1553b
 from util import asc2bin, bin2asc
 import time
 
 class acg:
+	def __read_eeprom_byte(self, ofs):
+		cmd = "rp%.2X"%ofs
+		resp = self.__trancieve(cmd)
+		if len(resp) != 2:
+			raise ACG_BadResponse(cmd, resp)
+		try:
+			byte = int(resp, 16)
+		except ValueError:
+			raise ACG_BadResponse(cmd, resp)
+		return byte
+		
 	def __read_eeprom(self):
 		eeprom = ''
 		for i in range(0, EEPROM_BYTES):
-			cmd = "rp%.2X"%i
-			resp = self.__trancieve(cmd)
-			if len(resp) != 2:
-				raise ACG_BadResponse(cmd, resp)
-			try:
-				byte = int(resp, 16)
-			except ValueError:
-				raise ACG_BadResponse(cmd, resp)
+			byte = self.__read_eeprom_byte(i)
 			eeprom += chr(byte)
 		return eeprom
 	
@@ -39,6 +43,14 @@ class acg:
 		while len(ret) and ret != 'S' and ret != '?':
 			ret = self.__serio.peekbuffer(0.15)
 		self.__cont_read = False
+
+		self.__pcon = self.__read_eeprom_byte(0xb)
+		self.__pcon3 = self.__read_eeprom_byte(0x1b)
+		self.__ext_reqa = bool(self.__pcon3 & (1<<6))
+		self.__ext_id = bool(self.__pcon & (1<<7))
+		print "EXT Id.: %s"%self.__ext_id
+		if self.__ext_id:
+			print "EXT ID. REQA: %s"%self.__ext_reqa
 
 		# Finally the device ought to be in a predictable state
 		# phew
@@ -116,29 +128,95 @@ class acg:
 			fsz = fsztab[hi]
 		return (baud, fsz)
 
-	def hselect(self):
-		uid = asc2bin(self.__trancieve("h08"))
-		speed = ord(uid[-1:])
+	def __parse_tag(self, cmd, uid):
+		if not self.__ext_id:
+			return tag(uid)
+
+		if self.__ext_reqa:
+			if len(uid) in [6, 9, 12]:
+				t = iso1443a(uid[2:], reqa = uid[:2])
+			elif len(uid) == 13: # ??????
+				t = iso1553b(uid[0:4],
+						app = uid[4:8],
+						protocol = uid[8:11],
+						cid = uid[11])
+			else:
+				raise ACG_BadResponse(cmd, bin2asc(uid))
+		else:
+			if len(uid) in [5, 8, 11]:
+				t = iso1443a(uid[1:], cascade = uid[0])
+			elif len(uid) == 12:
+				t = iso1553b(uid[0:4],
+						app = uid[4:8],
+						protocol = uid[8:11],
+						cid = uid[11])
+			else:
+				raise ACG_BadResponse(cmd, bin2asc(uid))
+		return t
+
+	def __parse_htag(self, cmd, resp):
+		speed = ord(resp[-1:])
+		uid = resp[:-1]
+
+		if not self.__ext_id:
+			t = self.__parse_tag(cmd, uid)
+		else:
+			ats = []
+			if self.__ext_reqa:
+				iso1443a = [12, 9, 6]
+			else:
+				iso1443a = [11, 8, 5]
+			for i in iso1443a:
+				if len(uid) < i:
+					continue
+				if len(uid) == uid[i] + i:
+					ats.append(i)
+			if len(ats):
+				a = ats[0]
+				t = self.__parse_tag(cmd, uid[:a])
+				t.set_rats(uid[a:])
+			else:
+				t = self.__parse_tag(cmd, uid)
+
 		(baud, fsz) = self.__rate_settings(speed)
-		return tag(uid[:-1], baud, fsz)
+		t.set_hispeed(baud, fsz)
+		return t
 
 	def select(self, stag = None):
-		if not stag:
-			uid = self.__trancieve("s")
-			return tag(asc2bin(uid))
+		if stag == None:
+			cmd = "s"
 		else:
-			uid = self.__trancieve("m%s\r"%stag.serial_str)
-			newtag = tag(asc2bin(uid))
-			if not newtag == stag:
-				raise ACG_NoTagInField
-			return stag
+			cmd = "m%s\r"%stag.serial_str
+
+		uid = asc2bin(self.__trancieve(cmd))
+		t = self.__parse_tag(cmd, uid)
+
+		if stag != None and t != stag:
+			raise ACG_NoTagInField
+
+		return t
+
+	def hselect(self, stag = None):
+		if stag == None:
+			cmd = "h08"
+		else:
+			self.__trancieve("h18")
+			cmd = "m%s\r"%stag.serial_str
+
+		uid = asc2bin(self.__trancieve(cmd))
+		t = self.__parse_htag(cmd, uid)
+
+		if stag != None and t != stag:
+			raise ACG_NoTagInField
+
+		return t
 
 	def multi_select(self):
 		uid = self.__serio.tx("m\r")
 		uid = self.__rx('m\r')
 		ret = []
 		while len(uid) > 2:
-			t = tag(asc2bin(uid))
+			t = self.__parse_tag("m\r", asc2bin(uid))
 			ret.append(t)
 			uid = self.__rx('m\r')
 		return ret
@@ -152,7 +230,7 @@ class acg:
 		if uid == 'S':
 			self.__cont_read = False
 			return None
-		return tag(asc2bin(uid))
+		return self.__parse_tag('c', asc2bin(uid))
 	
 	def abort_continuous_read(self):
 		if not self.__cont_read:

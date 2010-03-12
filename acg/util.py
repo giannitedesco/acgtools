@@ -24,3 +24,25 @@ def uint2bin(uint, bytes=4):
 		cur = (uint >> i) & 0xff
 		bin.append(chr(cur))
 	return bin
+
+def print_tag(tag):
+	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
+	if tag.iso1443a:
+		clevel = {
+				tag.CASCADE_LEVEL1: 1,
+				tag.CASCADE_LEVEL2: 2,
+				tag.CASCADE_LEVEL3: 3,
+			}
+		if clevel.has_key(tag.cascade):
+			print "  Cascade level %u"%clevel[tag.cascade]
+		if tag.reqa != None:
+			print "  REQA response: %s"%bin2asc(tag.reqa)
+		if tag.rats != None:
+			print "  RATS: %s"%bin2asc(tag.rats)
+	if tag.iso1443b:
+		pass
+	if tag.baud != None or tag.frame_size != None:
+		print "  Baud rate %uk, frame size %u bytes"%(
+			tag.baud and tag.baud or "UNKNOWN",
+			tag.frame_size and tag.frame_size or "UNKNOWN")
+
