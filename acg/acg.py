@@ -48,9 +48,6 @@ class acg:
 		self.__pcon3 = self.__read_eeprom_byte(0x1b)
 		self.__ext_reqa = bool(self.__pcon3 & (1<<6))
 		self.__ext_id = bool(self.__pcon & (1<<7))
-		print "EXT Id.: %s"%self.__ext_id
-		if self.__ext_id:
-			print "EXT ID. REQA: %s"%self.__ext_reqa
 
 		# Finally the device ought to be in a predictable state
 		# phew
