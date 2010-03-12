@@ -533,8 +533,10 @@ def do_passport(card):
 
 if __name__ == '__main__':
 	for dev in acg.get_devlist():
-		print dev.vendor
-		print dev.product
+		if dev.vendor:
+			print dev.vendor
+		if dev.vendor:
+			print dev.product
 		print "%s @ %u baud"%(dev.tty, dev.suggested_baud)
 		try:
 			card = acg.acg(line=dev.tty,

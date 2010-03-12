@@ -30,7 +30,7 @@ def do_multiselect(card):
 
 def do_select(card):
 	try:
-		ag = card.select()
+		tag = card.select()
 	except acg.ACG_Exception, e:
 		print e.msg
 		return
@@ -38,8 +38,10 @@ def do_select(card):
 
 if __name__ == '__main__':
 	for dev in acg.get_devlist():
-		print dev.vendor
-		print dev.product
+		if dev.vendor:
+			print dev.vendor
+		if dev.vendor:
+			print dev.product
 		print "%s @ %u baud"%(dev.tty, dev.suggested_baud)
 		try:
 			card = acg.acg(line=dev.tty,
