@@ -1,0 +1,53 @@
+===============================================================================
+actools v0.2 - A driver for ACG HF MultiISO RFID reader
+Copyright (c) 2010 Gianni Tedesco <gianni at scaramanga dot co dot uk>
+This software is released under the GNU GPL version 3 (see: COPYING)
+===============================================================================
+
+Overview
+--------
+ acgtools is a driver for ACG HF MultiISO RFID reader. This device consists of
+ an OEM RFID reader circuit connected to an FTDI USB serial converter. The
+ communications protocol is ASCII or, optionally, binary. Although projects
+ like RFIDIOt support this device, I wanted to play with some of the extended
+ features such as:
+  o Identifying protocol used for tag communications
+  o Retreiving ATS and REQA for RFID tags
+  o Continuous select and multi-select
+  o Page read mode where data blocks are automatically read from any tag
+    entering the field and stored for later retrieval.
+  o The binary protocol, although I have been too scared to enable this one for
+    fear of even temporarily bricking the device ;) To this end EEPROM
+    dump/flash tools are included as well as a nice interactive command-line
+    tool for editing the EEPROM images in a meaningful way.
+
+Implemented features
+--------------------
+ o Driver module supporting the following features:
+   o Uses hal/dbus to automatically detect and configure USB serial port
+   o Select, high speed select, multi-select, continuous-select
+   o Select returns protcol, REQA answer, ATS, cascade-level where supported
+   o EEPROM read/write
+   o Mifare login/readblock
+   o Custom APDU transmission
+ o EEPROM flash/dump/edit toolset
+ o select/multi-select/continuous-select/continuous-multiselect tool
+ o mifare-transport-keys example tools
+ o Machine-readable-travel-document tool which sets up secure communications
+   with an ePassport and dumps the contents of the passport to disk.
+
+Configuration
+-------------
+ If your system supports hal/dbus then devices should be automatically detected.
+ If not, then you will need to edit the configuration file in ~/.acgtools, the
+ format consists of space separated lines, one for each device in the following
+ format:
+
+ <tty> [baud]
+
+ For example:
+
+ /dev/ttyUSB0 460800
+ /dev/ttyUSB1
+
+ If baud rate is ommitted then it will default to 460800.

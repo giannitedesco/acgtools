@@ -1,3 +1,6 @@
+# This file is part of actools
+# Copyright (c) 2010 Gianni Tedesco
+# This is free software released under the terms of the GNU GPL v3
 import os
 class RFIDDevice:
 	def __init__(self, fn, lineno, tty, baud = None):
@@ -11,7 +14,7 @@ class RFIDDevice:
 
 		self.id = "%s:%u"%(fn, lineno)
 		if baud == None:
-			self.suggested_baud = 9600
+			self.suggested_baud = 460800
 		else:
 			self.suggested_baud = baud
 		self.tty = tty

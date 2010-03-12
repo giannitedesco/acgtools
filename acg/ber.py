@@ -1,3 +1,6 @@
+# This file is part of actools
+# Copyright (c) 2010 Gianni Tedesco
+# This is free software released under the terms of the GNU GPL v3
 class Tag:
 	def __init__(self, binary):
 		bin = binary

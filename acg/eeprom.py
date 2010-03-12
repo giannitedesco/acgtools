@@ -1,3 +1,6 @@
+# This file is part of actools
+# Copyright (c) 2010 Gianni Tedesco
+# This is free software released under the terms of the GNU GPL v3
 from errors import ACG_EEPROM_Error, ACG_EEPROM_ValueError
 from util import bin2uint
 
