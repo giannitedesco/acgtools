@@ -1,0 +1,67 @@
+#!/usr/bin/python
+
+import acg
+from acg.util import bin2asc
+
+def print_tag(tag):
+	print "Found %s tag with serial 0x%s"%(tag.typename, tag.serial_str)
+	if tag.type == tag.TAG_TYPE_ISO_1443A:
+		clevel = {
+				tag.CASCADE_LEVEL1: 1,
+				tag.CASCADE_LEVEL2: 2,
+				tag.CASCADE_LEVEL3: 3,
+			}
+		if clevel.has_key(tag.cascade):
+			print "  Cascade level %u"%clevel[tag.cascade]
+	elif tag.type == tag.TAG_TYPE_ISO_1443B:
+		return
+	if tag.baud != tag.BAUD_UNKNOWN or \
+		tag.frame_size != tag.FRAME_SIZE_UNKNOWN:
+		print "  Baud rate %s, frame size %s bytes"%(
+			tag.baud and str(tag.baud) + "k" or "UNKNOWN",
+			tag.frame_size and tag.frame_size or "UNKNOWN")
+	if tag.ats:
+		print "  ATS: %s"%bin2asc(tag.ats)
+
+def do_brute(card):
+	try:
+		tag = card.hselect()
+	except acg.ACG_CommandFail:
+		tag = card.select()
+	print_tag(tag)
+
+	out = {}
+	for ins in range(0, 0x100):
+		if ins in range(0x80, 0x85):
+			continue
+		pdu = bytearray([0, ins, 0, 0, 0])
+		try:
+			data = card.apdu(pdu)
+		except acg.ACG_NoTagInField:
+			card.select()
+			continue
+		if out.has_key(data):
+			out[data].append(ins)
+		else:
+			out[data] = [ins]
+	
+	for (d, arr) in out.items():
+		print "Data %s retrieved %u times"%(d, len(arr))
+		print " - %s"%(",".join(map(lambda x:"%.2x"%x, arr)))
+			
+
+if __name__ == '__main__':
+	for dev in acg.get_devlist():
+		print dev.vendor
+		print dev.product
+		print "%s @ %u baud"%(dev.tty, dev.suggested_baud)
+		try:
+			card = acg.acg(line=dev.tty,
+					baud = dev.suggested_baud,
+					tracefile="acgtool.trace")
+		except acg.ACG_Exception, e:
+			print "ERROR: %s"%e.msg
+			print
+			continue
+
+		do_brute(card)
