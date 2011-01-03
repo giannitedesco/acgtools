@@ -416,7 +416,7 @@ class rfidsh:
 			del tok
 
 			if l[0] == '\t':
-				(name, d) = cur
+				(_, d) = cur
 				d[sw] = name
 			else:
 				if not self.__sw_db.has_key(sw):
