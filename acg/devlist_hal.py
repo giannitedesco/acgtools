@@ -56,6 +56,8 @@ class RFIDDevice:
 		self.tty = str(self.tty)
 		self.vendor = str(self.vendor)
 		self.product = str(self.product)
+	def __str__(self):
+		return self.tty
 
 def __cb_add(sysbus, id):
 	try:

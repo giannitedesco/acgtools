@@ -5,7 +5,7 @@
 
 import acg
 from acg import ber
-from acg.util import bin2asc,asc2bin,uint2bin,bin2uint,print_tag
+from acg.util import bin2asc,asc2bin,uint2bin,bin2uint,describe_tag
 from Crypto.Hash import SHA
 from Crypto.Cipher import DES, DES3
 import random
@@ -503,7 +503,7 @@ class passport:
 
 def do_passport(card):
 	p = passport(card)
-	print_tag(p.tag)
+	print '\n'.join(describe_tag(p.tag))
 	print "\nValid passport application"
 
 	#m = mrz("1234567893GBRYYMMDD3SYYMMDD3<<<<<<<<<<<<<<00")

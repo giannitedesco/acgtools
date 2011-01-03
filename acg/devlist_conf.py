@@ -18,6 +18,8 @@ class RFIDDevice:
 		else:
 			self.suggested_baud = baud
 		self.tty = tty
+	def __str__(self):
+		return self.tty
 
 def __cb_add(sysbus, id):
 	try:

@@ -6,15 +6,18 @@ __licence__ = "GPLv3"
 import os, readline, atexit
 import acg 
 
-class scsh:
+class CmdError(Exception):
+	pass
+
+class rfidsh:
 	"An interactive RFID tag shell using acgtools."
 
-	def cmd_quit(self, str, *arg):
+	def cmd_quit(self, s, *arg):
 		"Exit the shell."
 
 		raise SystemExit
 
-	def cmd_help(self, str, *arg):
+	def cmd_help(self, s, *arg):
 		"Print out a help message."
 
 		self.out("You need help:")
@@ -23,23 +26,56 @@ class scsh:
 		for x in keys:
 			self.out("  %-10s: %s"%(x, self.__cmd[x].__doc__))
 
-	def cmd_devlist(self, str, *arg):
-		"Print out a list of candidate CCI devices."
-		for x in ccid.devlist():
-			self.out("  bus=%u addr=%u"%(x.bus(), x.addr()))
+	def __dev_str(self, d):
+		if d.vendor is not None and d.product is not None:
+			return '%s - %s'%(d.vendor, d.product)
+		elif d.vendor:
+			return d.vendor
+		elif d.product:
+			return d.product
+		else:
+			return 'UNKNOWN'
 
-	def cmd_dev(self, str, *arg):
+	def cmd_devlist(self, s, *arg):
+		"Print out a list of candidate RFID devices."
+		for x in acg.get_devlist():
+			self.out("%s - %s"%(x, self.__dev_str(x)))
+
+	def cmd_dev(self, s, *arg):
 		"Select a device by bus number and USB address."
-		self.out("%r"%acg.get_devlist())
+		if len(arg) != 1:
+			raise CmdError, "[tty]"
 
-	def cmd_cla(self, str, *arg):
+		dl = filter(lambda x:'%s'%x == arg[0], acg.get_devlist())
+		if len(dl) == 0:
+			raise CmdError, "device '%s' not found"%arg[0]
+		d = dl[0]
+		self.__dev = acg.acg(line = d.tty,
+					baud = d.suggested_baud,
+					tracefile = 'rfid-sh.trace')
+		self.out('Using %s: %s'%(d.tty, self.__dev_str(d)))
+
+	def cmd_list_tags(self, s, *arg):
+		'List tags in field'
+		tags = self.__dev.multi_select()
+		for tag in tags:
+			#card.select(tag)
+			map(self.out, acg.util.describe_tag(tag))
+		self.out('')
+	
+	def cmd_select_tag(self, s, *arg):
+		self.__tag = self.__dev.select()
+		self.out('Selected tag:')
+		map(self.out, acg.util.describe_tag(self.__tag))
+
+	def cmd_cla(self, s, *arg):
 		"Set CLA."
 
 		if len(arg):
 			self.__cla = int(arg[0], 0) & 0xff
 		self.out("CLA = 0x%.2x"%self.__cla)
 
-	def cmd_transmit(self, str, *arg):
+	def cmd_transmit(self, s, *arg):
 		"Transmit a raw APDU (except for CLA)."
 
 		self.__xfr.reset()
@@ -49,7 +85,7 @@ class scsh:
 		self.__tag.transact(self.__xfr)
 		self.__dump_results()
 
-	def select_by_id(self, str, *arg):
+	def select_by_id(self, s, *arg):
 		if len(arg) == 1 and arg[0] == "..":
 			# select parent DF
 			self.do_select(3, 0)
@@ -58,20 +94,20 @@ class scsh:
 			idbuf = chr(id >> 8) + chr(id & 0xff)
 			self.do_select(0, 0, idbuf)
 		else:
-			raise ValueError, "id (..|id)"
+			raise CmdError, "id (..|id)"
 
 
-	def select_by_name(self, str, *arg):
+	def select_by_name(self, s, *arg):
 		try:
 			name = ''
 			for x in arg:
 				name += chr(int(x, 16))
 		except:
-			name = str
+			name = s
 		self.do_select(1<<2, 0, name)
 
-	def select_by_path(self, str, *arg):
-		raise ValueError, "Not implemented"
+	def select_by_path(self, s, *arg):
+		raise CmdError, "Not implemented"
 
 	def do_select(self, p1, p2, data = None):
 		(sw1, sw2, data) = self.pdu(0xa4, p1, p2, data, 0)
@@ -80,25 +116,25 @@ class scsh:
 		else:
 			return (sw1, sw2, data)
 
-	def cmd_select(self, str, *arg):
+	def cmd_select(self, s, *arg):
 		"Select a file by ID, name or path."
 
 		if len(arg) == 0:
-			raise ValueError, "(id|name|path) [optional..]"
+			raise CmdError, "(id|name|path) [optional..]"
 
-		str = str[len(arg[0]):].lstrip()
+		s = s[len(arg[0]):].lstrip()
 		if arg[0] == "id":
-			self.select_by_id(str, *arg[1:])
+			self.select_by_id(s, *arg[1:])
 		elif arg[0] == "name":
-			self.select_by_name(str, *arg[1:])
+			self.select_by_name(s, *arg[1:])
 		elif arg[0] == "path":
-			self.select_by_path(str, *arg[1:])
+			self.select_by_path(s, *arg[1:])
 		else:
-			raise ValueError, "by id name or path?"
+			raise CmdError, "by id name or path?"
 
 		self.__dump_results()
 
-	def cmd_ber(self, str, *arg):
+	def cmd_ber(self, s, *arg):
 		"Enable or disable BER TLV decoding of responses."
 
 		if len(arg):
@@ -108,12 +144,12 @@ class scsh:
 			elif a in ["off", "false", "no"]:
 				self.__ber = False
 			else:
-				raise ValueError, "on/off"
+				raise CmdError, "on/off"
 
 		self.out("BER TLV decoding: %s"%( \
 			self.__ber and "on" or "off"))
 
-	def cmd_hex(self, str, *arg):
+	def cmd_hex(self, s, *arg):
 		"Enable or disable HEX decoding of responses."
 
 		if len(arg):
@@ -123,15 +159,15 @@ class scsh:
 			elif a in ["off", "false", "no"]:
 				self.__hex = False
 			else:
-				raise ValueError, "on/off"
+				raise CmdError, "on/off"
 
 		self.out("HEX decoding: %s"%(self.__hex and "on" or "off"))
 
-	def cmd_get(self, str, *arg):
+	def cmd_get(self, s, *arg):
 		"Get a data object."
 
 		if not len(arg):
-			raise ValueError, "Must specify data object ID"
+			raise CmdError, "Must specify data object ID"
 
 		x = int(arg[0], 0)
 
@@ -141,7 +177,7 @@ class scsh:
 			self.pdu(0xca, x >> 8, x & 0xff, le = sw2)
 		self.__dump_results()
 
-	def cmd_bruteget(self, str, *arg):
+	def cmd_bruteget(self, s, *arg):
 		"Brute force data objects."
 
 		x = 0
@@ -155,7 +191,7 @@ class scsh:
 				self.__dump_results()
 			x += 1
 
-	def cmd_challenge(self, str, *arg):
+	def cmd_challenge(self, s, *arg):
 		"Retreive a random number from the card."
 
 		if len(arg):
@@ -166,11 +202,11 @@ class scsh:
 		self.pdu(0x84, 0, 0, le = le)
 		self.__dump_results(ber=False)
 
-	def cmd_read_rec(self, str, *arg):
+	def cmd_read_rec(self, s, *arg):
 		"Read a record from the currently selected file."
 
 		if len(arg) < 2:
-			raise ValueError, "Must specify data object ID"
+			raise CmdError, "Must specify data object ID"
 
 		sfi = int(arg[1])
 		rec = int(arg[0])
@@ -187,29 +223,7 @@ class scsh:
 
 		self.__dump_results()
 
-	def cmd_status(self, str, *arg):
-		"Display hardware status."
-
-		# clock first because it updates status
-		c = self.__tag.clock_status()
-		s = self.__tag.status()
-
-		cstr = {
-			ccid.CHIPCARD_ACTIVE: "ACTIVE",
-			ccid.CHIPCARD_PRESENT: "PRESENT",
-			ccid.CHIPCARD_NOT_PRESENT: "NOT PRESENT"
-		}
-		self.out("Status: " + cstr[c])
-
-		sstr = {
-			ccid.CHIPCARD_CLOCK_START: "Running",
-			ccid.CHIPCARD_CLOCK_STOP_L: "Stopped in LO state",
-			ccid.CHIPCARD_CLOCK_STOP_H: "Stopped in HI state",
-			ccid.CHIPCARD_CLOCK_STOP: "Stopped"
-		}
-		self.out("Clock: " + sstr[s])
-
-	def cmd_brutecla(self, str, *arg):
+	def cmd_brutecla(self, s, *arg):
 		"Brute force CLA."
 
 		ret = {}
@@ -238,7 +252,7 @@ class scsh:
 			for v in ret[k]:
 				self.out(" o CLA %.2x"%v)
 
-	def cmd_brutefs(self, str, *arg):
+	def cmd_brutefs(self, s, *arg):
 		"Brute force file ID's."
 
 		ret = {}
@@ -284,7 +298,7 @@ class scsh:
 				else:
 					self.out(" o ID 0x%.4x"%v)
 
-	def cmd_bruteins(self, str, *arg):
+	def cmd_bruteins(self, s, *arg):
 		"Brute force INS."
 
 		ret = {}
@@ -320,13 +334,13 @@ class scsh:
 					len(ret[k]), sw1, sw2, 
 					self.get_str_sw(sw1, sw2)))
 			for v in ret[k]:
-				str = self.get_str_ins(v)
-				if str == None:
-					str = ""
+				s = self.get_str_ins(v)
+				if s == None:
+					s = ""
 				else:
-					str = " (%s)"%str
+					s = " (%s)"%s
 
-				self.out(" o INS %.2x%s"%(v, str))
+				self.out(" o INS %.2x%s"%(v, s))
 
 	def get_str_ins(self, ins):
 		if not self.__ins_db.has_key(ins):
@@ -359,7 +373,7 @@ class scsh:
 			elif len(tok) == 3:
 				cla = int(tok[2], 0)
 			else:
-				raise ValueError, "Malformed INS file"
+				raise CmdError, "Malformed INS file"
 
 			ins = int(tok[0], 0)
 			name = tok[1]
@@ -381,7 +395,7 @@ class scsh:
 
 			tok = l[:-1].split(None, 1)
 			if len(tok) != 2:
-				raise ValueError, "Malformed SW file"
+				raise CmdError, "Malformed SW file"
 
 			sw = int(tok[0], 0)
 			name = tok[1]
@@ -452,7 +466,7 @@ class scsh:
 			elif ber == False:
 				ccid.hex_dump(ret);
 			else:
-				raise ValueError, "ber == %r"%ber
+				raise CmdError, "ber == %r"%ber
 
 	def __init__(self, tracefile=None):
 		self.__dev = None
@@ -467,6 +481,8 @@ class scsh:
 		self.__cmd = {
 			"devlist":	self.cmd_devlist,
 			"dev":		self.cmd_dev,
+			'list_tags':	self.cmd_list_tags,
+			'select_tag':	self.cmd_select_tag,
 			"quit":		self.cmd_quit,
 			"cla":		self.cmd_cla,
 			"transmit":	self.cmd_transmit,
@@ -485,41 +501,37 @@ class scsh:
 		}
 
 	def prompt(self):
-		return "rfid-# "
+		if self.__tag is None:
+			return "ccid-$ "
+		else:
+			return "ccid-# "
 
-	def trace(self, str):
-		self.__cci.log("rfid> " + str + "\n")
+	def out(self, s):
+		print "rfid> " + s
 
-	def out(self, str):
-		print "rfid> " + str
-
-	def command(self, str):
-		arg = str.split()
+	def command(self, s):
+		arg = s.split()
 		if len(arg) < 1:
 			return
-		str = str[len(arg[0]):].lstrip()
+		s = s[len(arg[0]):].lstrip()
 
 		if not self.__cmd.has_key(arg[0]):
 			self.out("Unknown command: %s"%arg[0])
 			return
 
 		try:
-			self.__cmd[arg[0]](str, *arg[1:])
-		except ValueError, e:
-			self.out("Command failed: %s: %s"%(arg[0], e.args[0]))
-		except IOError, e:
-			if self.__tag.status() == ccid.CHIPCARD_NOT_PRESENT:
-				self.out("Card not present!!")
-			else:
-				self.out("Command failed: %s: %s"%(arg[0],
-								e.args[0]))
+			self.__cmd[arg[0]](s, *arg[1:])
+		except CmdError, e:
+			self.out("Command failed: %s"%e.args[0])
+		except acg.ACG_Exception, e:
+			self.out("Operation failed: %s"%e.msg)
 		except Exception, e:
-			self.out("Command failed: %s: %s"%(arg[0], e.args[0]))
+			self.out("Error: %s"%' '.join(e.args))
 
 ######### PROGRAM MAIN LOOP #########
 if __name__ == '__main__':
 	# TODO: Parse command line for log-file and databases
-	shell = scsh("rfid-sh.log")
+	shell = rfidsh("rfid-sh.log")
 
 	# Command historry file
 	histfile = os.path.join(os.environ["HOME"], ".rfid-sh")
@@ -544,7 +556,7 @@ if __name__ == '__main__':
 
 	while True:
 		try:
-			str = raw_input(shell.prompt())
+			s = raw_input(shell.prompt())
 		except EOFError:
 			print
 			break
@@ -553,6 +565,6 @@ if __name__ == '__main__':
 			continue
 
 		try:
-			shell.command(str);
+			shell.command(s);
 		except KeyboardInterrupt:
 			continue

@@ -4,7 +4,7 @@
 # This is free software released under the terms of the GNU GPL v3
 
 import acg
-from acg.util import bin2asc, print_tag
+from acg.util import bin2asc, describe_tag 
 
 def do_continuous(card):
 	prev_tag = None
@@ -17,7 +17,7 @@ def do_continuous(card):
 			print e.msg
 			return
 		if not prev_tag or tag.serial != prev_tag.serial:
-			print_tag(tag)
+			print '\n'.join(describe_tag(tag))
 		prev_tag = tag
 
 def do_multiselect(card):
@@ -28,7 +28,7 @@ def do_multiselect(card):
 		return
 	for tag in tags:
 		#card.select(tag)
-		print_tag(tag)
+		print '\n'.join(describe_tag(tag))
 	print
 
 def do_select(card):
@@ -37,7 +37,7 @@ def do_select(card):
 	except acg.ACG_Exception, e:
 		print e.msg
 		return
-	print_tag(tag)
+	print '\n'.join(describe_tag(tag))
 
 if __name__ == '__main__':
 	for dev in acg.get_devlist():
