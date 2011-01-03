@@ -8,6 +8,9 @@ import acg
 __copyright__ = "Copyright (c) 2010 Gianni Tedesco"
 __licence__ = "GPLv3"
 
+class GPError(Exception):
+	pass
+
 def ber_dump(s):
 	try:
 		t = acg.ber.tlv(s)
@@ -114,6 +117,35 @@ class GPTool(ui.App):
 			return (d, sw1, sw2)
 		return self.pdu(0xca, x >> 8, x & 0xff, le = sw2)
 
+	def get_card_data(self):
+		(d, sw1, sw2) = self.get_data(0x66)
+		if sw1 != 0x90:
+			raise GPError('Card data not retrieved')
+
+		tlv = acg.ber.tlv(d)
+		#ber_dump(d)
+
+		if int(tlv.tag) != 0x66 or not tlv.has_tag(0x73):
+			raise GPError('Card data corrupted')
+
+		tlv73 = tlv[0x73][0]
+
+		if not tlv73.has_tag(0x64) or not tlv73[0x64][0].has_tag(0x06):
+			raise GPError('Card recognition data corrupted')
+		if not tlv73.has_tag(0x60) or not tlv73[0x60][0].has_tag(0x06):
+			raise GPError('Card recognition data corrupted')
+
+		tlv64 = tlv73[0x64][0][0x06][0].val
+		self.scp = tlv64[-2]
+		if tlv64[-3] != 4:
+			raise GPError('Unsupported scp'\
+					'version %d'%tlv64[-3])
+
+		tlv60 = tlv73[0x60][0][0x06][0].val
+		if tlv60[-4] != 2:
+			raise GPError('Unsupported global '\
+					'platform version %d'%tlv60[-4])
+		self.gp_ver = tuple(tlv60[-3:])
 
 	def __page_card(self):
 		p = PropList()
@@ -143,22 +175,15 @@ class GPTool(ui.App):
 		elif isinstance(self.__tag, acg.iso1443b):
 			p.append('Tag Type', 'ISO1443-B')
 		if self.__tag.baud is not None:
-			p.append('Baud Rate', '%uK'%self.__tag.baud)
+			p.append('Baud Rate', '%uKbps'%self.__tag.baud)
 		if self.__tag.frame_size is not None:
 			p.append('Frame Size', '%u bytes'%self.__tag.frame_size)
 
-		for (tag,label) in [
-					(0x66, 'Card Data'),
-					(0x42, 'Issuer ID Number'),
-					(0x45, 'Card Image Number'),
-					(0xe0, 'Key Information Template'),
-					(0xc1, 'Sequence Counter')
-				]:
-			(d, sw1, sw2) = self.get_data(tag)
-			print '%.2x = %.2x %.2x'%(tag, sw1, sw2)
-			ber_dump(d)
-			
-		(d, sw1, sw2)
+		self.get_card_data()
+		p.subsection('GlobalPlatform Card Data')
+		p.append('Global Platform', 'Version %u.%u.%u'%self.gp_ver)
+		p.append('Secure Channel Protocol', self.scp)
+		print self.gp_ver
 
 		return p
 
