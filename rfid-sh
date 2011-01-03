@@ -57,6 +57,8 @@ class rfidsh:
 
 	def cmd_list_tags(self, s, *arg):
 		'List tags in field'
+		if self.__dev is None:
+			raise CmdError, 'Select an RFID device first'
 		tags = self.__dev.multi_select()
 		for tag in tags:
 			#card.select(tag)
@@ -64,7 +66,18 @@ class rfidsh:
 		self.out('')
 	
 	def cmd_select_tag(self, s, *arg):
+		'Select a tag in the field'
+		if self.__dev is None:
+			raise CmdError, 'Select an RFID device first'
 		self.__tag = self.__dev.select()
+		self.out('Selected tag:')
+		map(self.out, acg.util.describe_tag(self.__tag))
+
+	def cmd_hselect_tag(self, s, *arg):
+		'Select a tag in the field for hi-speed operation'
+		if self.__dev is None:
+			raise CmdError, 'Select an RFID device first'
+		self.__tag = self.__dev.hselect()
 		self.out('Selected tag:')
 		map(self.out, acg.util.describe_tag(self.__tag))
 
@@ -483,6 +496,7 @@ class rfidsh:
 			"dev":		self.cmd_dev,
 			'list_tags':	self.cmd_list_tags,
 			'select_tag':	self.cmd_select_tag,
+			'hselect_tag':	self.cmd_hselect_tag,
 			"quit":		self.cmd_quit,
 			"cla":		self.cmd_cla,
 			"transmit":	self.cmd_transmit,
