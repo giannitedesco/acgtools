@@ -7,9 +7,11 @@ from errors import ACG_BER_Error
 class Tag:
 	def __init__(self, binary):
 		bin = binary
+		if len(bin) == 0:
+			raise ACG_BER_Error
 		self.idb = bin[0]
 		itag = self.idb
-		len = 1
+		ln = 1
 		done = False
 		if (bin[0] & 0x1f) == 0x1f:
 			shift = 8
@@ -17,7 +19,7 @@ class Tag:
 				itag <<= shift
 				itag |= char & 0x7f
 				shift = 7
-				len += 1
+				ln += 1
 				if not char & 0x80:
 					done = True
 					break
@@ -29,7 +31,7 @@ class Tag:
 		clsmap = {0:"universal", 1:"application",
 			2:"context-specific", 3:"private"}
 		self.tag = itag
-		self.len = len
+		self.ln = ln
 		self.cls = (self.idb & 0xc0) >> 6
 		self.constructed = (self.idb & 0x20) >> 5
 		self.clsname = clsmap[self.cls]
@@ -37,7 +39,7 @@ class Tag:
 	def __int__(self):
 		return self.tag
 	def __len__(self):
-		return self.len
+		return self.ln
 	def __str__(self):
 		return "Tag(%s%s 0x%x)"%(\
 			self.constructed and "constructed " or "",
@@ -61,16 +63,16 @@ class Len:
 			for char in chars:
 				l <<= 8
 				l |= char
-		self.len = l
+		self.ln = l
 		self.llen = ll + 1
 	def __int__(self):
-		return self.len
+		return self.ln
 	def __len__(self):
 		return self.llen
 	def __str__(self):
-		return "Len(%s%u)"%(self.llen == 1 and 's' or 'l', self.len)
+		return "Len(%s%u)"%(self.llen == 1 and 's' or 'l', self.ln)
 	def __repr__(self):
-		return "Len(%u)"%self.len
+		return "Len(%u)"%self.ln
 
 class taglen:
 	def __init__(self, bin):
@@ -81,20 +83,20 @@ class taglen:
 		bin = bin[len(tln):]
 
 		self.tag = tag
-		self.len = tln
+		self.ln = tln
 	def __len__(self):
-		return len(self.tag) + len(self.len)
+		return len(self.tag) + len(self.ln)
 	def __str__(self):
-		return "taglen(%s, %s)"%(self.tag, self.len)
+		return "taglen(%s, %s)"%(self.tag, self.ln)
 	def __repr__(self):
-		return "taglen(%s, %s)"%(self.tag, self.len)
+		return "taglen(%s, %s)"%(self.tag, self.ln)
 
 class tlv:
 	def pretty_print(self, indent = 0):
 		tabs = ''.join("  " for i in range(indent))
 		print tabs + ".tag = 0x%x"%int(self.tag)
 		print tabs + ".cls = %s"%self.tag.clsname
-		print tabs + ".len = %u / 0x%x"%(int(self.len), int(self.len))
+		print tabs + ".ln = %u / 0x%x"%(int(self.ln), int(self.ln))
 		if self.tag.constructed:
 			for x in self:
 				for y in x:
@@ -113,15 +115,15 @@ class tlv:
 		bin = bin[len(tln):]
 
 		self.tag = tag
-		self.len = tln
+		self.ln = tln
 
 		if len(bin) < int(tln):
 			raise ACG_BER_Error
 
 		self.tag = tag
-		self.len = tln
+		self.ln = tln
 		self.val = bin[:int(tln)]
-		self.__len = len(self.tag) + len(self.len) + len(self.val)
+		self.__len = len(self.tag) + len(self.ln) + len(self.val)
 
 		self.__items = {}
 		bin = self.val
@@ -147,6 +149,6 @@ class tlv:
 	def __len__(self):
 		return self.__len
 	def __str__(self):
-		return "tlv(%s, %s)"%(self.tag, self.len)
+		return "tlv(%s, %s)"%(self.tag, self.ln)
 	def __repr__(self):
-		return "tlv(%s, %s)"%(self.tag, self.len)
+		return "tlv(%s, %s)"%(self.tag, self.ln)
