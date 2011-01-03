@@ -8,6 +8,10 @@ import acg
 
 class CmdError(Exception):
 	pass
+def hex_dump(s):
+	return
+def ber_dump(s):
+	return
 
 class rfidsh:
 	"An interactive RFID tag shell using acgtools."
@@ -91,11 +95,11 @@ class rfidsh:
 	def cmd_transmit(self, s, *arg):
 		"Transmit a raw APDU (except for CLA)."
 
-		self.__xfr.reset()
-		self.__xfr.tx_byte(self.__cla)
-		for x in arg:
-			self.__xfr.tx_byte(int(x, 16))
-		self.__tag.transact(self.__xfr)
+		if self.__dev is None:
+			raise CmdError, 'Select an RFID device first'
+		pdu = bytearray()
+		pdu.extend(map(lambda x:int(x, 16), arg))
+		self.__xfr = self.__dev.apdu(self.__xfr)
 		self.__dump_results()
 
 	def select_by_id(self, s, *arg):
@@ -123,11 +127,11 @@ class rfidsh:
 		raise CmdError, "Not implemented"
 
 	def do_select(self, p1, p2, data = None):
-		(sw1, sw2, data) = self.pdu(0xa4, p1, p2, data, 0)
+		(data, sw1, sw2) = self.pdu(0xa4, p1, p2, data, 0)
 		if sw1 == 0x61 or sw1 == 0x9f:
 			return self.pdu(0xc0, 0, 0, le = sw2)
 		else:
-			return (sw1, sw2, data)
+			return (data, sw1, sw2)
 
 	def cmd_select(self, s, *arg):
 		"Select a file by ID, name or path."
@@ -184,7 +188,7 @@ class rfidsh:
 
 		x = int(arg[0], 0)
 
-		(sw1, sw2, data) = self.pdu(0xca, x >> 8,  x & 0xff)
+		(data, sw1, sw2) = self.pdu(0xca, x >> 8,  x & 0xff)
 		if sw1 == 0x6c:
 			self.out("0x%.4x"%x)
 			self.pdu(0xca, x >> 8, x & 0xff, le = sw2)
@@ -195,9 +199,9 @@ class rfidsh:
 
 		x = 0
 		while x < 0x10000:
-			(sw1, sw2, data) = self.pdu(0xca, x >> 8,  x & 0xff)
+			(data, sw1, sw2) = self.pdu(0xca, x >> 8,  x & 0xff)
 			if sw1 == 0x6c:
-				(sw1, sw2, data) = self.pdu(0xca, x >> 8,
+				(data, sw1, sw2) = self.pdu(0xca, x >> 8,
 							x & 0xff, le = sw2)
 			if sw1 == 0x90:
 				self.out("0x%.4x"%x)
@@ -228,7 +232,7 @@ class rfidsh:
 		else:
 			le = 0
 
-		(sw1, sw2, tmp) = self.pdu(0xb2, rec, (sfi << 3) | 4, le = le)
+		(data, sw1, sw2) = self.pdu(0xb2, rec, (sfi << 3) | 4, le = le)
 		del tmp 
 
 		if sw1 == 0x6c or sw1 == 0x67:
@@ -239,18 +243,14 @@ class rfidsh:
 	def cmd_brutecla(self, s, *arg):
 		"Brute force CLA."
 
+		if self.__dev is None:
+			raise CmdError, 'Select an RFID device first'
 		ret = {}
 		i = 0
 		while i < 0xff:
-			self.__xfr.reset()
-			self.__xfr.tx_byte(i)
-			self.__xfr.tx_byte(0)
-			self.__xfr.tx_byte(0)
-			self.__xfr.tx_byte(0)
-			self.__xfr.tx_byte(0)
-			self.__tag.transact(self.__xfr)
-			sw1 = self.__xfr.rx_sw1()
-			sw2 = self.__xfr.rx_sw2()
+			pdu = bytearray([i, 0, 0, 0, 0])
+			(_, sw1, sw2) = self.__dev.apdu(pdu)
+			print '%d %d'%(sw1, sw2)
 			if sw1 != 0x6e:
 				if not ret.has_key((sw1, sw2)):
 					ret[(sw1, sw2)] = []
@@ -286,8 +286,7 @@ class rfidsh:
 				continue
 			idbuf = chr(i >> 8) + chr(i & 0xff)
 			self.do_select(0x0, 0, idbuf)
-			sw1 = self.__xfr.rx_sw1()
-			sw2 = self.__xfr.rx_sw2()
+			(_, sw1, sw2) = self.__xfr
 			if not ret.has_key((sw1, sw2)):
 				ret[(sw1, sw2)] = []
 			if len(ret[(sw1, sw2)]) < 100:
@@ -333,8 +332,7 @@ class rfidsh:
 				i += 1
 				continue
 
-			sw1 = self.__xfr.rx_sw1()
-			sw2 = self.__xfr.rx_sw2()
+			(_, sw1, sw2) = self.__xfr
 			if sw1 != 0x6d and sw1 != 0x6e:
 				if not ret.has_key((sw1, sw2)):
 					ret[(sw1, sw2)] = []
@@ -424,10 +422,11 @@ class rfidsh:
 				cur = self.__sw_db[sw]
 
 	def get_str_sw(self, sw1 = None, sw2 = None):
+		(_, x_sw1, x_sw2) = self.__xfr
 		if sw1 == None:
-			sw1 = self.__xfr.rx_sw1()
+			sw1 = x_sw1
 		if sw2 == None:
-			sw2 = self.__xfr.rx_sw2()
+			sw2 = x_sw2
 
 		if not self.__sw_db.has_key(sw1):
 			return 'Unknown'
@@ -440,44 +439,41 @@ class rfidsh:
 		return d[sw2]
 
 	def pdu(self, ins, p1, p2, data = None, le = None):
-		self.__xfr.reset()
-		self.__xfr.tx_byte(self.__cla)
-		self.__xfr.tx_byte(ins)
-		self.__xfr.tx_byte(p1)
-		self.__xfr.tx_byte(p2)
+		if self.__dev is None:
+			raise CmdError, 'Select an RFID device first'
+		x = bytearray()
+		x.append(self.__cla)
+		x.append(ins)
+		x.append(p1)
+		x.append(p2)
 		totlen = 4
-		if data != None:
-			self.__xfr.tx_byte(len(data)) # Lc
-			self.__xfr.tx_str(data)
+		if data is not None:
+			x.append(len(data)) # Lc
+			x.extend(bytearray(data))
 			totlen += 1 + len(data)
-		if  le != None:
-			self.__xfr.tx_byte(le)
+		if  le is not None:
+			x.append(le)
 			totlen += 1
 		while totlen < 5:
-			self.__xfr.tx_byte(0)
+			x.append(0)
 			totlen += 1
-		self.__tag.transact(self.__xfr)
-		return (self.__xfr.rx_sw1(),
-				self.__xfr.rx_sw2(),
-				self.__xfr.rx_data())
+		self.__xfr = self.__dev.apdu(x)
+		return self.__xfr
 
 	def __dump_results(self, ber = None):
-		ret = self.__xfr.rx_data()
+		(ret, sw1, sw2) = self.__xfr
 		self.out("SW1 = 0x%.2x : SW2 = 0x%.2x : %s (%u bytes)"%(
-				self.__xfr.rx_sw1(),
-				self.__xfr.rx_sw2(),
-				self.get_str_sw(),
-				len(ret)))
+				sw1, sw2, self.get_str_sw(), len(ret)))
 		if len(ret):
 			if ber == None:
 				if self.__hex:
-					ccid.hex_dump(ret);
+					hex_dump(ret);
 				if self.__ber:
-					ccid.ber_dump(ret);
+					ber_dump(ret);
 			elif ber == True:
-				ccid.ber_dump(ret);
+				ber_dump(ret);
 			elif ber == False:
-				ccid.hex_dump(ret);
+				hex_dump(ret);
 			else:
 				raise CmdError, "ber == %r"%ber
 
@@ -516,9 +512,9 @@ class rfidsh:
 
 	def prompt(self):
 		if self.__tag is None:
-			return "ccid-$ "
+			return "rfid-$ "
 		else:
-			return "ccid-# "
+			return "rfid-# "
 
 	def out(self, s):
 		print "rfid> " + s
