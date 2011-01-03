@@ -49,7 +49,9 @@ class rfidsh:
 	def cmd_devlist(self, s, *arg):
 		"Print out a list of candidate RFID devices."
 		for x in acg.get_devlist():
-			self.out("%s - %s"%(x, self.__dev_str(x)))
+			self.out("%s - %s (%u baud)"%(x,
+							self.__dev_str(x),
+							x.suggested_baud))
 
 	def cmd_dev(self, s, *arg):
 		"Select a device by bus number and USB address."
