@@ -7,6 +7,6 @@ try:
 except:
 	from devlist_conf import get_devlist
 from eeprom import *
-from tag import tag
+from tag import tag, iso1443a, iso1443b
 from acg import acg
 import ber

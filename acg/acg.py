@@ -4,7 +4,7 @@
 from errors import *
 from eeprom import *
 from serio import serio
-from tag import tag, iso1443a, iso1553b
+from tag import tag, iso1443a, iso1443b
 from util import asc2bin, bin2asc
 import time
 
@@ -136,7 +136,7 @@ class acg:
 			if len(uid) in [6, 9, 12]:
 				t = iso1443a(uid[2:], reqa = uid[:2])
 			elif len(uid) == 13: # ??????
-				t = iso1553b(uid[0:4],
+				t = iso1443b(uid[0:4],
 						app = uid[4:8],
 						protocol = uid[8:11],
 						cid = uid[11])
@@ -146,7 +146,7 @@ class acg:
 			if len(uid) in [5, 8, 11]:
 				t = iso1443a(uid[1:], cascade = uid[0])
 			elif len(uid) == 12:
-				t = iso1553b(uid[0:4],
+				t = iso1443b(uid[0:4],
 						app = uid[4:8],
 						protocol = uid[8:11],
 						cid = uid[11])

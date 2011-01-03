@@ -36,7 +36,7 @@ class iso1443a(tag):
 	def set_rats(self, rats):
 		self.rats = rats
 
-class iso1553b(tag):
+class iso1443b(tag):
 	def __init__(self, id, app=None, protocol=None, cid=None):
 		assert(len(id) == 12)
 		tag.__init__(self, id)
