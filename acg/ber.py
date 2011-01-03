@@ -31,7 +31,7 @@ class Tag:
 		clsmap = {0:"universal", 1:"application",
 			2:"context-specific", 3:"private"}
 		self.tag = itag
-		self.ln = ln
+		self.len = ln
 		self.cls = (self.idb & 0xc0) >> 6
 		self.constructed = (self.idb & 0x20) >> 5
 		self.clsname = clsmap[self.cls]
@@ -39,7 +39,7 @@ class Tag:
 	def __int__(self):
 		return self.tag
 	def __len__(self):
-		return self.ln
+		return self.len
 	def __str__(self):
 		return "Tag(%s%s 0x%x)"%(\
 			self.constructed and "constructed " or "",
@@ -63,16 +63,16 @@ class Len:
 			for char in chars:
 				l <<= 8
 				l |= char
-		self.ln = l
+		self.len = l
 		self.llen = ll + 1
 	def __int__(self):
-		return self.ln
+		return self.len
 	def __len__(self):
 		return self.llen
 	def __str__(self):
-		return "Len(%s%u)"%(self.llen == 1 and 's' or 'l', self.ln)
+		return "Len(%s%u)"%(self.llen == 1 and 's' or 'l', self.len)
 	def __repr__(self):
-		return "Len(%u)"%self.ln
+		return "Len(%u)"%self.len
 
 class taglen:
 	def __init__(self, bin):
@@ -83,20 +83,20 @@ class taglen:
 		bin = bin[len(tln):]
 
 		self.tag = tag
-		self.ln = tln
+		self.len = tln
 	def __len__(self):
-		return len(self.tag) + len(self.ln)
+		return len(self.tag) + len(self.len)
 	def __str__(self):
-		return "taglen(%s, %s)"%(self.tag, self.ln)
+		return "taglen(%s, %s)"%(self.tag, self.len)
 	def __repr__(self):
-		return "taglen(%s, %s)"%(self.tag, self.ln)
+		return "taglen(%s, %s)"%(self.tag, self.len)
 
 class tlv:
 	def pretty_print(self, indent = 0):
 		tabs = ''.join("  " for i in range(indent))
 		print tabs + ".tag = 0x%x"%int(self.tag)
 		print tabs + ".cls = %s"%self.tag.clsname
-		print tabs + ".ln = %u / 0x%x"%(int(self.ln), int(self.ln))
+		print tabs + ".ln = %u / 0x%x"%(int(self.len), int(self.len))
 		if self.tag.constructed:
 			for x in self:
 				for y in x:
@@ -115,15 +115,15 @@ class tlv:
 		bin = bin[len(tln):]
 
 		self.tag = tag
-		self.ln = tln
+		self.len = tln
 
 		if len(bin) < int(tln):
 			raise ACG_BER_Error
 
 		self.tag = tag
-		self.ln = tln
+		self.len = tln
 		self.val = bin[:int(tln)]
-		self.__len = len(self.tag) + len(self.ln) + len(self.val)
+		self.__len = len(self.tag) + len(self.len) + len(self.val)
 
 		self.__items = {}
 		bin = self.val
@@ -149,6 +149,6 @@ class tlv:
 	def __len__(self):
 		return self.__len
 	def __str__(self):
-		return "tlv(%s, %s)"%(self.tag, self.ln)
+		return "tlv(%s, %s)"%(self.tag, self.len)
 	def __repr__(self):
-		return "tlv(%s, %s)"%(self.tag, self.ln)
+		return "tlv(%s, %s)"%(self.tag, self.len)
