@@ -1,6 +1,9 @@
 # This file is part of actools
 # Copyright (c) 2010 Gianni Tedesco
 # This is free software released under the terms of the GNU GPL v3
+
+from errors import ACG_BER_Error
+
 class Tag:
 	def __init__(self, binary):
 		bin = binary
@@ -21,7 +24,7 @@ class Tag:
 		else:
 			done = True
 		if not done:
-			raise Exception("Decode Error")
+			raise ACG_BER_Error
 
 		clsmap = {0:"universal", 1:"application",
 			2:"context-specific", 3:"private"}
@@ -53,7 +56,7 @@ class Len:
 			ll = bin[0] & 0x7f
 			chars = bin[1:ll + 1]
 			if len(chars) < ll:
-				raise Exception("Decode Error")
+				raise ACG_BER_Error
 			l = 0
 			for char in chars:
 				l <<= 8
@@ -96,6 +99,10 @@ class tlv:
 			for x in self:
 				for y in x:
 					y.pretty_print(indent + 1)
+		else:
+			print tabs + ".data = %s"%' '.join(
+					map(lambda x:'%.2x'%x, self.val))
+			print
 		
 	def __init__(self, binary):
 		bin = binary
@@ -109,7 +116,7 @@ class tlv:
 		self.len = tln
 
 		if len(bin) < int(tln):
-			raise Exception("Decode error")
+			raise ACG_BER_Error
 
 		self.tag = tag
 		self.len = tln

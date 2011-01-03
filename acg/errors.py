@@ -74,3 +74,7 @@ class ACG_RangeError(ACG_Exception):
 class ACG_AuthFailure(ACG_Exception):
 	def __init__(self, cmd):
 		self.msg = "Authentication failed: %r"%cmd
+
+class ACG_BER_Error(ACG_Exception):
+	def __init__(self):
+		self.msg = "BER Decode Error"
