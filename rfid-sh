@@ -9,8 +9,14 @@ import acg
 class CmdError(Exception):
 	pass
 def hex_dump(s):
+	print ' '.join(map(lambda x:'%.2x'%x, s))
 	return
 def ber_dump(s):
+	try:
+		t = acg.ber.tlv(s)
+	except acg.ACG_BER_Error:
+		return
+	t.pretty_print()
 	return
 
 class rfidsh:
@@ -116,11 +122,9 @@ class rfidsh:
 
 	def select_by_name(self, s, *arg):
 		try:
-			name = ''
-			for x in arg:
-				name += chr(int(x, 16))
+			name = bytearray(map(lambda x:int(x, 16), arg))
 		except:
-			name = s
+			name = bytearray(s)
 		self.do_select(1<<2, 0, name)
 
 	def select_by_path(self, s, *arg):
@@ -250,7 +254,6 @@ class rfidsh:
 		while i < 0xff:
 			pdu = bytearray([i, 0, 0, 0, 0])
 			(_, sw1, sw2) = self.__dev.apdu(pdu)
-			print '%d %d'%(sw1, sw2)
 			if sw1 != 0x6e:
 				if not ret.has_key((sw1, sw2)):
 					ret[(sw1, sw2)] = []
@@ -484,7 +487,7 @@ class rfidsh:
 		self.__rxlen = 1024
 		self.__cla = 0
 		self.__hex = True
-		self.__ber = False
+		self.__ber = True
 		self.__ins_db = {}
 		self.__sw_db = {}
 		self.__cmd = {
