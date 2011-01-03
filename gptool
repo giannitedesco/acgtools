@@ -1,0 +1,270 @@
+#!/usr/bin/python
+
+import gobject, gtk, pango
+import gnome
+from gnome import ui
+import acg
+
+__copyright__ = "Copyright (c) 2010 Gianni Tedesco"
+__licence__ = "GPLv3"
+
+def ber_dump(s):
+	try:
+		t = acg.ber.tlv(s)
+	except acg.ACG_BER_Error:
+		return
+	t.pretty_print()
+
+class PropList(gtk.Table):
+	def __init__(self):
+		gtk.Table.__init__(self, rows = 1, columns = 3)
+		attr = pango.AttrList()
+		attr.insert(pango.AttrWeight(pango.WEIGHT_BOLD, 0, -1))
+		self.__bold = attr
+
+		attr = pango.AttrList()
+		attr.insert(pango.AttrWeight(pango.WEIGHT_BOLD, 0, -1))
+		attr.insert(pango.AttrScale(pango.SCALE_LARGE, 0, -1))
+		self.__section = attr
+
+	def append(self, k, v):
+		nr = self.get_property('n-rows')
+		self.set_property('n-rows', nr + 1)
+
+		l = gtk.Label(k + ':')
+		r = gtk.Label(v)
+
+		l.set_alignment(0, 0)
+		r.set_alignment(0, 0)
+
+#		l.set_property('attributes', self.__bold)
+
+		self.attach(l, 0, 1, nr - 1, nr, yoptions = 0)
+		self.attach(r, 1, 2, nr - 1, nr, yoptions = 0)
+
+	def subsection(self, label):
+		nr = self.get_property('n-rows')
+		if nr != 1:
+			self.set_property('n-rows', nr + 1)
+			self.attach(gtk.Label(''), 0, 2,
+					nr - 1, nr, yoptions = 0)
+
+		nr = self.get_property('n-rows')
+		self.set_property('n-rows', nr + 1)
+
+		l = gtk.Label(label)
+		l.set_property('attributes', self.__section)
+		l.set_alignment(0, 0)
+
+		self.attach(l, 0, 2, nr - 1, nr, yoptions = 0)
+
+		nr = self.get_property('n-rows')
+		self.set_property('n-rows', nr + 1)
+		self.attach(gtk.HSeparator(), 0, 2, nr - 1, nr, yoptions = 0)
+		return
+
+class GPTool(ui.App):
+	__clevel = {
+			acg.iso1443a.CASCADE_LEVEL1: 1,
+			acg.iso1443a.CASCADE_LEVEL2: 2,
+			acg.iso1443a.CASCADE_LEVEL3: 3,
+		}
+	aid_op = bytearray([0xa0, 0x00 , 0x00, 0x00, 0x03, 0x00, 0x00, 0x00])
+	def destroy(self, w):
+		gtk.main_quit()
+
+	def set_status(self, str):
+		self.__ab.set_status(str)
+
+	def error(self, e):
+		msg = ' '.join(e.args)
+		self.set_status(msg)
+		return
+
+	def apdu(self, cla, ins, p1, p2, data = None, le = None):
+		if self.__dev is None:
+			raise CmdError, 'Select an RFID device first'
+		x = bytearray([cla, ins, p1, p2])
+		totlen = 4
+		if data is not None:
+			x.append(len(data)) # Lc
+			x.extend(bytearray(data))
+			totlen += 1 + len(data)
+		if  le is not None:
+			x.append(le)
+			totlen += 1
+		while totlen < 5:
+			x.append(0)
+			totlen += 1
+		return self.__terminal.apdu(x) 
+
+	def select_by_aid(self, aid):
+		self.do_select(1 << 2, 0, aid)
+
+	def do_select(self, p1, p2, data = None):
+		(data, sw1, sw2) = self.apdu(0x00, 0xa4, p1, p2, data, 0)
+		if sw1 == 0x61 or sw1 == 0x9f:
+			return self.apdu(0x00, 0xc0, 0, 0, le = sw2)
+		else:
+			return (data, sw1, sw2)
+
+	def get_data(self, tag):
+		(d, sw1, sw2) = self.apdu(0x80, 0xca, (tag >> 8), tag & 0xff)
+		if sw1 != 0x6c:
+			return (d, sw1, sw2)
+		return self.pdu(0xca, x >> 8, x & 0xff, le = sw2)
+
+
+	def __page_card(self):
+		p = PropList()
+
+		p.subsection('Device Information')
+		if self.__dev.vendor:
+			p.append('Vendor', self.__dev.vendor)
+		if self.__dev.product:
+			p.append('Product', self.__dev.product)
+		p.append('Serial Line', self.__dev.tty)
+		p.append('Baud Rate', self.__dev.suggested_baud)
+
+		p.subsection('Tag Information')
+		if isinstance(self.__tag, acg.iso1443a):
+			p.append('Tag Type', 'ISO1443-A')
+			if self.__clevel.has_key(self.__tag.cascade):
+				p.append('Cascade Level',
+					self.__clevel[self.__tag.cascade])
+			if self.__tag.reqa is not None:
+				p.append('REQA Response',
+					' '.join(map(lambda x:'%.2x'%x,
+							self.__tag.reqa)))
+			if self.__tag.rats is not None:
+				p.append('RATS',
+					' '.join(map(lambda x:'%.2x'%x,
+							self.__tag.rats)))
+		elif isinstance(self.__tag, acg.iso1443b):
+			p.append('Tag Type', 'ISO1443-B')
+		if self.__tag.baud is not None:
+			p.append('Baud Rate', '%uK'%self.__tag.baud)
+		if self.__tag.frame_size is not None:
+			p.append('Frame Size', '%u bytes'%self.__tag.frame_size)
+
+		for (tag,label) in [
+					(0x66, 'Card Data'),
+					(0x42, 'Issuer ID Number'),
+					(0x45, 'Card Image Number'),
+					(0xe0, 'Key Information Template'),
+					(0xc1, 'Sequence Counter')
+				]:
+			(d, sw1, sw2) = self.get_data(tag)
+			print '%.2x = %.2x %.2x'%(tag, sw1, sw2)
+			ber_dump(d)
+			
+		(d, sw1, sw2)
+
+		return p
+
+	def __page_app(self):
+		return gtk.Label("App shitz")
+
+	def __page_select(self, sel):
+		(ls, i) = sel.get_selected()
+		if i is None:
+			return
+		w = ls.get_value(i, 0)()
+		w.show_all()
+		ow = self.__hp.get_child2()
+		if ow is not None:
+			ow.destroy()
+		self.__hp.add2(w)
+		self.__hp.show_all()
+
+	def __page_list(self):
+		ls = gtk.ListStore(gobject.TYPE_PYOBJECT,
+					gobject.TYPE_STRING,
+					gobject.TYPE_STRING)
+		t = gtk.TreeView(ls)
+		self.__hp.add1(t)
+
+		t.set_headers_visible(False)
+		t.set_enable_search(True)
+		t.set_search_column(0)
+
+		r = gtk.CellRendererText()
+		i = gtk.CellRendererPixbuf()
+		i.set_property("stock-size", gtk.ICON_SIZE_LARGE_TOOLBAR)
+
+		col = gtk.TreeViewColumn("Page", None)
+		col.pack_start(i, True)
+		col.add_attribute(i, "stock-id", 1)
+		col.pack_start(r, True)
+		col.add_attribute(r, "text", 2)
+		col.set_resizable(True)
+		t.append_column(col)
+
+		for (label, cb, icon) in self.__pages:
+			ls.append((cb, icon, label))
+
+		sel = t.get_selection()
+		sel.connect("changed", self.__page_select)
+		sel.select_path('0')
+
+		return (ls, t)
+
+	def __init__(self, dev, terminal, tag):
+		self.__pages = [
+			('Card Details', self.__page_card,
+					gtk.STOCK_DIALOG_AUTHENTICATION),
+			('Installed Applications', self.__page_app,
+					gtk.STOCK_DIALOG_AUTHENTICATION),
+		]
+
+		self.__dev = dev
+		self.__terminal = terminal
+		self.__tag = tag
+		#self.select_by_aid(self.aid_op)
+
+		ui.App.__init__(self, "gptool", "RFID GlobalPlatform")
+		self.set_default_size(640, 480)
+		self.connect("destroy", self.destroy)
+
+		self.__ab = ui.AppBar(True, True, ui.PREFERENCES_USER)
+		self.set_statusbar(self.__ab)
+
+		self.__hp = gtk.HPaned()
+		self.__page_list()
+
+		self.set_contents(self.__hp)
+
+def err_destroy(self):
+	gtk.main_quit()
+def err_destroy2(self, b):
+	gtk.main_quit()
+
+def bail(msg):
+	err = gtk.MessageDialog(type = gtk.MESSAGE_ERROR,
+				buttons = gtk.BUTTONS_CLOSE,
+				message_format = msg)
+	err.show_all()
+	err.connect("destroy", err_destroy)
+	err.connect("response", err_destroy2)
+	gtk.main()
+	raise SystemExit
+
+if __name__ == '__main__':
+	gnome.program_init("gptool", "0.3")
+	wins = []
+	for dev in acg.get_devlist():
+		i = 0
+		try:
+			terminal = acg.acg(line = dev.tty,
+						baud = dev.suggested_baud,
+						tracefile = 'gptool-%d.trace'%i)
+			i += 1
+			tag = terminal.hselect()
+			w = GPTool(dev, terminal, tag)
+			w.show_all()
+			wins.append(w)
+		except:
+			raise
+	if len(wins) == 0:
+		bail("No RFID devices could be found")
+	gtk.main()
